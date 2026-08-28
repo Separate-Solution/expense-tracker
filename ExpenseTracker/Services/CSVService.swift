@@ -7,6 +7,7 @@ struct CSVImportSummary {
     var createdAccounts: [String] = []
     var createdCategories: [String] = []
     var failures: [String] = []
+    var ignoredColumns: [String] = []
 
     var isEmpty: Bool { imported == 0 && skippedDuplicates == 0 && failures.isEmpty }
 }
@@ -22,6 +23,135 @@ enum CSVError: LocalizedError {
         case .missingRequiredColumns(let columns):
             return "The file is missing required column(s): \(columns.joined(separator: ", "))."
         }
+    }
+}
+
+/// A transaction field that can be read from a CSV column.
+enum CSVField: String, CaseIterable, Identifiable {
+    case date, amount, type, title, category, account, accountKind, note, id
+    case income, color, icon, emoji
+
+    var id: String { rawValue }
+
+    /// Fields offered on the mapping screen, in the order they're shown.
+    static let assignable: [CSVField] = [
+        .date, .amount, .type, .title, .category, .account, .accountKind, .note, .id
+    ]
+
+    var label: String {
+        switch self {
+        case .date: return "Date"
+        case .amount: return "Amount"
+        case .type: return "Type"
+        case .title: return "Title"
+        case .category: return "Category"
+        case .account: return "Account"
+        case .accountKind: return "Account Type"
+        case .note: return "Note"
+        case .id: return "ID"
+        case .income: return "Income flag"
+        case .color: return "Category colour"
+        case .icon: return "Category icon"
+        case .emoji: return "Category emoji"
+        }
+    }
+
+    var isRequired: Bool { self == .date || self == .amount }
+
+    /// What happens when this column is left unassigned. Shown under every
+    /// unassigned row so a blank picker is never a silent surprise.
+    var unassignedNote: String {
+        switch self {
+        case .date: return "Required. Nothing can be imported without it."
+        case .amount: return "Required. Nothing can be imported without it."
+        case .type: return "Falls back to the sign of the amount — negative becomes an expense."
+        case .title: return "Falls back to the category name."
+        case .category: return "Transactions come in without a category."
+        case .account: return "Everything goes into your first account."
+        case .accountKind: return "Guessed from the account name."
+        case .note: return "Notes are left empty."
+        case .id: return "Duplicates can't be detected, so importing this file twice adds it twice."
+        default: return ""
+        }
+    }
+
+    /// Header names matched automatically, compared after normalising away
+    /// case, spaces and punctuation.
+    var aliases: [String] {
+        switch self {
+        case .date: return ["date", "transactiondate", "day"]
+        case .amount: return ["amount", "value", "sum"]
+        case .type: return ["type", "transactiontype", "kind", "direction", "drcr", "crdr"]
+        case .title: return ["title", "name", "description", "notetitle", "payee", "merchant", "narration", "particulars"]
+        case .category: return ["category", "categoryname"]
+        case .account: return ["account", "accountname", "bank", "source"]
+        case .accountKind: return ["accounttype", "accountkind"]
+        case .note: return ["note", "notes", "memo", "comment"]
+        case .id: return ["id", "uuid", "transactionid"]
+        case .income: return ["income", "isincome"]
+        case .color: return ["color", "categorycolor"]
+        case .icon: return ["icon", "categoryicon"]
+        case .emoji: return ["emoji", "categoryemoji"]
+        }
+    }
+}
+
+/// Which CSV column each field reads from, plus the date pattern to read with.
+struct CSVColumnMapping {
+    var indices: [CSVField: Int] = [:]
+    var datePattern: String?
+
+    var missingRequiredFields: [CSVField] {
+        CSVField.assignable.filter { $0.isRequired && indices[$0] == nil }
+    }
+
+    /// Column indices in use, so anything left over can be reported as ignored.
+    var usedIndices: Set<Int> { Set(indices.values) }
+}
+
+/// A parsed file waiting to be imported. Holds no database state — building one
+/// is safe and reversible, which is what lets the mapping be reviewed first.
+struct CSVImportPlan: Identifiable {
+    let id = UUID()
+    let headers: [String]
+    let rows: [[String]]
+    let suggestedMapping: CSVColumnMapping
+
+    func replacingSuggestedMapping(with mapping: CSVColumnMapping) -> CSVImportPlan {
+        CSVImportPlan(headers: headers, rows: rows, suggestedMapping: mapping)
+    }
+
+    var transactionCount: Int { rows.count }
+
+    /// Every non-empty value in `column`. Used to work out the date format, and
+    /// recomputed when the Date assignment changes: a column we didn't detect
+    /// automatically has never been sampled.
+    func values(inColumn index: Int?) -> [String] {
+        guard let index else { return [] }
+        return rows.compactMap { row in
+            guard index < row.count else { return nil }
+            let value = row[index].trimmingCharacters(in: .whitespacesAndNewlines)
+            return value.isEmpty ? nil : value
+        }
+    }
+
+    func dateFormats(inColumn index: Int?) -> [String] {
+        CSVService.detectDateFormats(in: values(inColumn: index))
+    }
+
+    var firstRow: [String] { rows.first ?? [] }
+
+    func value(inFirstRow index: Int) -> String {
+        index < firstRow.count ? firstRow[index].trimmingCharacters(in: .whitespacesAndNewlines) : ""
+    }
+
+    /// Header names that no field reads from — the columns that would otherwise
+    /// be dropped without telling anyone.
+    func ignoredColumns(for mapping: CSVColumnMapping) -> [String] {
+        let used = mapping.usedIndices
+        return headers.enumerated()
+            .filter { !used.contains($0.offset) && !$0.element.isEmpty }
+            .map(\.element)
     }
 }
 
@@ -58,100 +188,148 @@ enum CSVService {
 
     // MARK: - Import
 
-    /// Parses `text` and inserts transactions, creating any account or category
-    /// named in the file that does not exist yet. Rows whose ID already exists
-    /// are skipped so re-importing the same export is safe.
+    /// Parses `text`, then imports it using the automatically suggested mapping.
+    /// Kept for callers that don't show the mapping screen; the UI path uses
+    /// `prepare` + `commit` so the user can correct a bad guess first.
     static func importTransactions(
         from text: String,
         into context: ModelContext,
         defaultAccount: Account?
     ) throws -> CSVImportSummary {
+        let plan = try prepare(from: text)
+        let missing = plan.suggestedMapping.missingRequiredFields
+        guard missing.isEmpty else {
+            throw CSVError.missingRequiredColumns(missing.map(\.label))
+        }
+        return try commit(plan, mapping: plan.suggestedMapping, into: context, defaultAccount: defaultAccount)
+    }
+
+    /// Reads the file and works out a proposed column mapping without touching
+    /// the database, so the mapping can be reviewed before anything is written.
+    static func prepare(from text: String) throws -> CSVImportPlan {
         let rows = parse(text)
         guard let headerRow = rows.first, rows.count > 1 else { throw CSVError.emptyFile }
 
-        let header = headerRow.map(normalizeKey)
-        func column(_ candidates: [String]) -> Int? {
-            for candidate in candidates {
-                if let index = header.firstIndex(of: candidate) { return index }
+        let dataRows = Array(rows.dropFirst()).filter { row in
+            !row.joined().trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        }
+        guard !dataRows.isEmpty else { throw CSVError.emptyFile }
+
+        let normalized = headerRow.map(normalizeKey)
+        var indices: [CSVField: Int] = [:]
+        for field in CSVField.allCases {
+            for alias in field.aliases {
+                if let index = normalized.firstIndex(of: alias) {
+                    indices[field] = index
+                    break
+                }
             }
-            return nil
         }
 
-        let dateIndex = column(["date", "transactiondate", "day"])
-        let amountIndex = column(["amount", "value", "sum"])
-        var missing: [String] = []
-        if dateIndex == nil { missing.append("Date") }
-        if amountIndex == nil { missing.append("Amount") }
-        guard missing.isEmpty, let dateIndex, let amountIndex else {
-            throw CSVError.missingRequiredColumns(missing)
-        }
+        let plan = CSVImportPlan(
+            headers: headerRow.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) },
+            rows: dataRows,
+            suggestedMapping: CSVColumnMapping(indices: indices)
+        )
 
-        let titleIndex = column(["title", "name", "description", "note title", "payee", "merchant"])
-        let typeIndex = column(["type", "transactiontype", "kind", "direction"])
-        let accountIndex = column(["account", "accountname"])
-        let accountTypeIndex = column(["accounttype", "accountkind"])
-        let categoryIndex = column(["category", "categoryname"])
-        let noteIndex = column(["note", "notes", "memo", "comment"])
-        let idIndex = column(["id", "uuid", "transactionid"])
-        // Cashew-specific extras, used when present to preserve more of the export.
-        let incomeIndex = column(["income", "isincome"])
-        let colorIndex = column(["color", "categorycolor"])
-        let iconIndex = column(["icon", "categoryicon"])
-        let emojiIndex = column(["emoji", "categoryemoji"])
+        // Look at every date in the file, not just the first row: a value like
+        // 15/03 rules out MM/dd/yyyy, which is what makes an ambiguous file
+        // resolvable instead of a coin flip.
+        var suggested = plan.suggestedMapping
+        suggested.datePattern = plan.dateFormats(inColumn: indices[.date]).first
+        return plan.replacingSuggestedMapping(with: suggested)
+    }
+
+    /// Date patterns that parse every sample given, in priority order. More than
+    /// one means the file is genuinely ambiguous and the user has to choose.
+    static func detectDateFormats(in samples: [String]) -> [String] {
+        guard !samples.isEmpty else { return [] }
+        let checked = samples.prefix(200)
+        return datePatterns.filter { pattern in
+            checked.allSatisfy { strictlyMatches($0, pattern: pattern) }
+        }
+    }
+
+    /// DateFormatter is lenient about separators — "dd-MM-yyyy" happily reads
+    /// "03/04/2026" — which would fill the format picker with choices that
+    /// differ only cosmetically. Re-formatting the parsed date and comparing the
+    /// punctuation back to the input rejects those, while still allowing
+    /// unpadded values like "3/4/2026".
+    private static func strictlyMatches(_ sample: String, pattern: String) -> Bool {
+        let formatter = formatter(for: pattern)
+        guard let date = formatter.date(from: sample) else { return false }
+        return punctuation(of: formatter.string(from: date)) == punctuation(of: sample)
+    }
+
+    private static func punctuation(of text: String) -> String {
+        String(text.filter { !$0.isLetter && !$0.isNumber && !$0.isWhitespace })
+    }
+
+    /// Inserts transactions using an explicit mapping, creating any account or
+    /// category named in the file that does not exist yet. Rows whose ID already
+    /// exists are skipped so re-importing the same export is safe.
+    static func commit(
+        _ plan: CSVImportPlan,
+        mapping: CSVColumnMapping,
+        into context: ModelContext,
+        defaultAccount: Account?
+    ) throws -> CSVImportSummary {
+        let missing = mapping.missingRequiredFields
+        guard missing.isEmpty else {
+            throw CSVError.missingRequiredColumns(missing.map(\.label))
+        }
 
         var summary = CSVImportSummary()
+        summary.ignoredColumns = plan.ignoredColumns(for: mapping)
+
         var accountCache = try existingAccountsByName(in: context)
         var categoryCache = try existingCategoriesByKey(in: context)
-        let existingIDs = try existingTransactionIDs(in: context)
-        var seenIDs = existingIDs
+        var seenIDs = try existingTransactionIDs(in: context)
 
-        for (offset, row) in rows.dropFirst().enumerated() {
+        for (offset, row) in plan.rows.enumerated() {
             let lineNumber = offset + 2
-            func field(_ index: Int?) -> String {
-                guard let index, index < row.count else { return "" }
+            func field(_ csvField: CSVField) -> String {
+                guard let index = mapping.indices[csvField], index < row.count else { return "" }
                 return row[index].trimmingCharacters(in: .whitespacesAndNewlines)
             }
 
-            let rawRow = row.joined().trimmingCharacters(in: .whitespacesAndNewlines)
-            if rawRow.isEmpty { continue }
-
-            guard let date = parseDate(field(dateIndex)) else {
-                summary.failures.append("Line \(lineNumber): couldn't read the date “\(field(dateIndex))”.")
+            guard let date = parseDate(field(.date), using: mapping.datePattern) else {
+                summary.failures.append("Line \(lineNumber): couldn't read the date “\(field(.date))”.")
                 continue
             }
-            guard let signedAmount = parseAmount(field(amountIndex)) else {
-                summary.failures.append("Line \(lineNumber): couldn't read the amount “\(field(amountIndex))”.")
+            guard let signedAmount = parseAmount(field(.amount)) else {
+                summary.failures.append("Line \(lineNumber): couldn't read the amount “\(field(.amount))”.")
                 continue
             }
 
             // A boolean "income" column is the most reliable signal (Cashew writes one),
             // then an explicit type word, then finally the sign of the amount.
             let type: TransactionType
-            if let isIncome = parseBool(field(incomeIndex)) {
+            if let isIncome = parseBool(field(.income)) {
                 type = isIncome ? .income : .expense
-            } else if let explicit = parseType(field(typeIndex)) {
+            } else if let explicit = parseType(field(.type)) {
                 type = explicit
             } else {
                 type = signedAmount < 0 ? .expense : .income
             }
 
-            if let idText = idIndex.map({ _ in field(idIndex) }),
-               let uuid = UUID(uuidString: idText) {
-                if seenIDs.contains(uuid) {
+            let existingID = UUID(uuidString: field(.id))
+            if let existingID {
+                if seenIDs.contains(existingID) {
                     summary.skippedDuplicates += 1
                     continue
                 }
-                seenIDs.insert(uuid)
+                seenIDs.insert(existingID)
             }
 
-            let accountName = field(accountIndex)
+            let accountName = field(.account)
             var account = defaultAccount
             if !accountName.isEmpty {
                 let key = accountName.lowercased()
                 if let existing = accountCache[key] {
                     account = existing
                 } else {
-                    let kind = AccountKind(rawValue: field(accountTypeIndex).lowercased())
+                    let kind = AccountKind(rawValue: field(.accountKind).lowercased())
                         ?? inferAccountKind(from: accountName)
                     let created = Account(
                         name: accountName,
@@ -166,7 +344,7 @@ enum CSVService {
                 }
             }
 
-            let categoryName = field(categoryIndex)
+            let categoryName = field(.category)
             var category: Category?
             if !categoryName.isEmpty {
                 let key = "\(type.rawValue)|\(categoryName.lowercased())"
@@ -176,11 +354,11 @@ enum CSVService {
                     let created = Category(
                         name: categoryName,
                         emoji: categoryEmoji(
-                            explicit: field(emojiIndex),
-                            iconName: field(iconIndex),
+                            explicit: field(.emoji),
+                            iconName: field(.icon),
                             type: type
                         ),
-                        colorHex: parseColorHex(field(colorIndex))
+                        colorHex: parseColorHex(field(.color))
                             ?? Theme.paletteHexes[categoryCache.count % Theme.paletteHexes.count],
                         type: type,
                         sortIndex: categoryCache.count
@@ -192,17 +370,17 @@ enum CSVService {
                 }
             }
 
-            let title = field(titleIndex).isEmpty
+            let title = field(.title).isEmpty
                 ? (category?.name ?? "Imported transaction")
-                : field(titleIndex)
+                : field(.title)
 
             let transaction = Transaction(
-                id: idIndex.flatMap { _ in UUID(uuidString: field(idIndex)) } ?? UUID(),
+                id: existingID ?? UUID(),
                 title: title,
                 amount: abs(signedAmount).roundedToCurrency,
                 type: type,
                 date: date,
-                note: field(noteIndex),
+                note: field(.note),
                 account: account,
                 category: category
             )
@@ -318,9 +496,16 @@ enum CSVService {
         return isNegative ? -value : value
     }
 
-    static func parseDate(_ text: String) -> Date? {
+    /// With an explicit `pattern`, only that pattern (and ISO 8601) is accepted:
+    /// falling back to the general list would quietly undo the format the user
+    /// picked on an ambiguous file. Without one, every known pattern is tried.
+    static func parseDate(_ text: String, using pattern: String? = nil) -> Date? {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return nil }
+        if let pattern {
+            if let date = formatter(for: pattern).date(from: trimmed) { return date }
+            return ISO8601DateFormatter().date(from: trimmed)
+        }
         for formatter in dateFormatters {
             if let date = formatter.date(from: trimmed) { return date }
         }
@@ -345,25 +530,38 @@ enum CSVService {
         return formatter
     }()
 
-    private static let dateFormatters: [DateFormatter] = {
-        let patterns = [
-            // Most specific first — Cashew exports "2026-08-12 18:04:13.000".
-            "yyyy-MM-dd HH:mm:ss.SSS", "yyyy-MM-dd'T'HH:mm:ss.SSSZ",
-            "yyyy-MM-dd'T'HH:mm:ssZ", "yyyy-MM-dd'T'HH:mm:ss",
-            "yyyy-MM-dd HH:mm:ss", "yyyy-MM-dd HH:mm",
-            "yyyy-MM-dd", "yyyy/MM/dd HH:mm:ss", "yyyy/MM/dd",
-            "dd-MM-yyyy HH:mm:ss", "dd/MM/yyyy HH:mm:ss",
-            "dd-MM-yyyy", "dd/MM/yyyy", "MM/dd/yyyy",
-            "dd MMM yyyy", "MMM dd, yyyy", "dd-MMM-yyyy"
-        ]
-        return patterns.map { pattern in
-            let formatter = DateFormatter()
-            formatter.locale = Locale(identifier: "en_US_POSIX")
-            formatter.timeZone = .current
-            formatter.dateFormat = pattern
-            return formatter
-        }
+    /// Patterns tried in order when no format has been chosen, most specific
+    /// first. `dd/MM/yyyy` deliberately precedes `MM/dd/yyyy`; when a file
+    /// matches both, the mapping screen asks instead of guessing.
+    static let datePatterns = [
+        "yyyy-MM-dd HH:mm:ss.SSS", "yyyy-MM-dd'T'HH:mm:ss.SSSZ",
+        "yyyy-MM-dd'T'HH:mm:ssZ", "yyyy-MM-dd'T'HH:mm:ss",
+        "yyyy-MM-dd HH:mm:ss", "yyyy-MM-dd HH:mm",
+        "yyyy-MM-dd", "yyyy/MM/dd HH:mm:ss", "yyyy/MM/dd",
+        "dd-MM-yyyy HH:mm:ss", "dd/MM/yyyy HH:mm:ss",
+        "dd-MM-yyyy", "dd/MM/yyyy", "MM/dd/yyyy",
+        "dd MMM yyyy", "MMM dd, yyyy", "dd-MMM-yyyy"
+    ]
+
+    private static let formatterCache: [String: DateFormatter] = {
+        var cache: [String: DateFormatter] = [:]
+        for pattern in datePatterns { cache[pattern] = makeDateFormatter(pattern) }
+        return cache
     }()
+
+    private static func makeDateFormatter(_ pattern: String) -> DateFormatter {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = .current
+        formatter.dateFormat = pattern
+        return formatter
+    }
+
+    static func formatter(for pattern: String) -> DateFormatter {
+        formatterCache[pattern] ?? makeDateFormatter(pattern)
+    }
+
+    private static let dateFormatters: [DateFormatter] = datePatterns.map { formatter(for: $0) }
 
     // MARK: - RFC 4180 parsing / escaping
 

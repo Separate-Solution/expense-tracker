@@ -32,6 +32,17 @@ struct DataManagementView: View {
     @State private var importKind: ImportKind?
     @State private var pendingAction: PendingAction?
     @State private var pendingRestore: BackupPayload?
+    @State private var pendingCSV: CSVImportPlan?
+    /// Set by the mapping sheet's Import button; the import itself runs in
+    /// `onDismiss` so the result alert isn't presented while the sheet closes.
+    /// It carries its own copy of the plan because `sheet(item:)` clears
+    /// `pendingCSV` before `onDismiss` runs.
+    @State private var confirmedImport: ConfirmedImport?
+
+    struct ConfirmedImport {
+        let plan: CSVImportPlan
+        let mapping: CSVColumnMapping
+    }
 
     @State private var statusTitle = ""
     @State private var statusMessage = ""
@@ -57,7 +68,8 @@ struct DataManagementView: View {
                 Text("CSV")
             } footer: {
                 Text("Columns: Date, Title, Type, Amount, Currency, Account, Account Type, Category, Note, ID. "
-                     + "Only Date and Amount are required on import — accounts and categories in the file are created if they don't exist, and rows whose ID already exists are skipped.")
+                     + "Importing any other file works too — you'll get to check which column feeds which field before anything is saved. "
+                     + "Accounts and categories in the file are created if they don't exist, and rows whose ID already exists are skipped.")
             }
 
             Section {
@@ -97,6 +109,11 @@ struct DataManagementView: View {
         }
         .sheet(item: $exportedFile) { file in
             ShareSheet(url: file.url)
+        }
+        .sheet(item: $pendingCSV, onDismiss: runConfirmedImport) { plan in
+            CSVColumnMappingView(plan: plan) { mapping in
+                confirmedImport = ConfirmedImport(plan: plan, mapping: mapping)
+            }
         }
         .fileImporter(
             isPresented: Binding(
@@ -178,19 +195,34 @@ struct DataManagementView: View {
             defer { isWorking = false }
             do {
                 let text = try readSecurityScoped(url) { try String(contentsOf: $0, encoding: .utf8) }
-                let defaultAccount = try context.fetch(FetchDescriptor<Account>())
-                    .filter { !$0.isArchived }
-                    .sorted { $0.sortIndex < $1.sortIndex }
-                    .first
-                let summary = try CSVService.importTransactions(
-                    from: text,
-                    into: context,
-                    defaultAccount: defaultAccount
-                )
-                showStatus("Import finished", describe(summary))
+                confirmedImport = nil
+                pendingCSV = try CSVService.prepare(from: text)
             } catch {
                 showStatus("Import failed", error.localizedDescription)
             }
+        }
+    }
+
+    /// Runs once the mapping sheet has closed, and only if it closed via Import.
+    private func runConfirmedImport() {
+        guard let confirmed = confirmedImport else { return }
+        confirmedImport = nil
+        isWorking = true
+        defer { isWorking = false }
+        do {
+            let defaultAccount = try context.fetch(FetchDescriptor<Account>())
+                .filter { !$0.isArchived }
+                .sorted { $0.sortIndex < $1.sortIndex }
+                .first
+            let summary = try CSVService.commit(
+                confirmed.plan,
+                mapping: confirmed.mapping,
+                into: context,
+                defaultAccount: defaultAccount
+            )
+            showStatus("Import finished", describe(summary))
+        } catch {
+            showStatus("Import failed", error.localizedDescription)
         }
     }
 
@@ -206,6 +238,9 @@ struct DataManagementView: View {
         if !summary.createdCategories.isEmpty {
             let unique = Array(Set(summary.createdCategories)).sorted()
             lines.append("Created categories: \(unique.joined(separator: ", ")).")
+        }
+        if !summary.ignoredColumns.isEmpty {
+            lines.append("Columns not imported: \(summary.ignoredColumns.joined(separator: ", ")).")
         }
         if !summary.failures.isEmpty {
             lines.append("")
