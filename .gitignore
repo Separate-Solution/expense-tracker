@@ -1,0 +1,46 @@
+# ---- macOS ----
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon?
+
+# ---- Xcode: per-user state ----
+# Shared schemes live in xcshareddata and are intentionally NOT ignored.
+xcuserdata/
+*.xcuserstate
+*.xcscmblueprint
+*.xccheckout
+*.pbxuser
+*.mode1v3
+*.mode2v3
+*.perspectivev3
+!default.pbxuser
+!default.mode1v3
+!default.mode2v3
+!default.perspectivev3
+
+# ---- Xcode: build output ----
+build/
+DerivedData/
+*.moved-aside
+*.hmap
+*.ipa
+*.dSYM
+*.dSYM.zip
+*.xcarchive
+*.o
+*.swiftmodule.swiftsourceinfo
+
+# ---- Swift Package Manager ----
+.build/
+.swiftpm/
+Packages/
+# Package.resolved is committed on purpose so builds are reproducible.
+
+# ---- Playgrounds ----
+timeline.xctimeline
+playground.xcworkspace
+
+# ---- Misc ----
+*.log
+*.tmp
