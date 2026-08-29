@@ -9,6 +9,9 @@ struct AmountText: View {
     var weight: Font.Weight = .semibold
     /// When false the value is shown plain, without a +/− prefix or colour.
     var showsSign: Bool = true
+    /// Transfers move money without being spending or income, so they keep the
+    /// sign but drop the red/green colouring that would read as either.
+    var isNeutral: Bool = false
 
     /// The amount with `type`'s sign applied, or as-is when no type is set.
     private var signedValue: Decimal {
@@ -18,7 +21,7 @@ struct AmountText: View {
 
     /// Red for money out, green for money in, plain when signs are hidden.
     private var tint: Color {
-        guard showsSign else { return .primary }
+        guard showsSign, !isNeutral else { return .primary }
         if signedValue < 0 { return Theme.expense }
         if signedValue > 0 { return Theme.income }
         return .secondary

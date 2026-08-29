@@ -81,8 +81,10 @@ history it already created.
 **Transactions** — grouped by day with per-day totals, searchable across title,
 note, category, account and card, and filterable by type, payment source and
 category. Future-dated entries are marked **Upcoming** and kept out of the
-month's spend. Bill payments carry a transfer marker and name the card they
-settle.
+month's spend. Bill payments carry a transfer marker, name the card they settle,
+and are shown in a neutral colour and left out of the list's totals — the
+spending they settle is already listed, so counting them again would double up.
+The header says how many rows were left out whenever any are.
 
 **Data** (Settings → Import, Export & Backup)
 

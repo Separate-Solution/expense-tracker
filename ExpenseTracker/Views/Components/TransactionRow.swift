@@ -65,7 +65,12 @@ struct TransactionRow: View {
             Spacer(minLength: 8)
 
             VStack(alignment: .trailing, spacing: 3) {
-                AmountText(amount: transaction.amount, type: transaction.type, font: .callout)
+                AmountText(
+                    amount: transaction.amount,
+                    type: transaction.type,
+                    font: .callout,
+                    isNeutral: transaction.isCardPayment
+                )
                 if transaction.isScheduled {
                     Text("Upcoming")
                         .font(.caption2)
