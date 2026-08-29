@@ -23,6 +23,17 @@ final class Account {
     @Relationship(deleteRule: .nullify, inverse: \RecurringRule.account)
     var recurringRules: [RecurringRule]? = []
 
+    /// Creates an account.
+    /// - Parameters:
+    ///   - id: Stable identifier; a fresh UUID unless restoring from a backup.
+    ///   - name: Display name.
+    ///   - kind: Bank, credit or cash — decides liability handling.
+    ///   - openingBalance: Balance before any transaction recorded here.
+    ///   - colorHex: Accent colour; defaults to the first palette entry.
+    ///   - symbolName: SF Symbol override; defaults to the kind's symbol.
+    ///   - sortIndex: Position in the accounts list.
+    ///   - note: Free-text note.
+    ///   - createdAt: Creation timestamp.
     init(
         id: UUID = UUID(),
         name: String,
@@ -46,6 +57,7 @@ final class Account {
         self.createdAt = createdAt
     }
 
+    /// Typed view of `kindRaw`; falls back to `.bank` on an unknown value.
     var kind: AccountKind {
         get { AccountKind(rawValue: kindRaw) ?? .bank }
         set { kindRaw = newValue.rawValue }

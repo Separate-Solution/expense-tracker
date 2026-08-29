@@ -20,6 +20,19 @@ final class Transaction {
     /// Set when this transaction was generated from a recurring rule.
     var recurringRule: RecurringRule?
 
+    /// Creates a transaction. `amount` is stored as its magnitude — the sign
+    /// comes from `type`.
+    /// - Parameters:
+    ///   - id: Stable identifier; a fresh UUID unless importing or restoring.
+    ///   - title: Display title.
+    ///   - amount: Magnitude; the absolute value is stored.
+    ///   - type: Expense or income.
+    ///   - date: When it happened; a future date makes it scheduled.
+    ///   - note: Free-text note.
+    ///   - account: Owning account, if any.
+    ///   - category: Category, if any.
+    ///   - recurringRule: Rule that generated this, when applicable.
+    ///   - createdAt: Creation timestamp; also seeds `updatedAt`.
     init(
         id: UUID = UUID(),
         title: String,
@@ -45,15 +58,18 @@ final class Transaction {
         self.updatedAt = createdAt
     }
 
+    /// Typed view of `typeRaw`; falls back to `.expense` on an unknown value.
     var type: TransactionType {
         get { TransactionType(rawValue: typeRaw) ?? .expense }
         set { typeRaw = newValue.rawValue }
     }
 
+    /// Amount with its sign applied — negative for expenses, positive for income.
     var signedAmount: Decimal { abs(amount) * type.sign }
 
     /// A transaction dated in the future — shown separately as "Upcoming".
     var isScheduled: Bool { date > Date.now.endOfDay }
 
+    /// True when a recurring rule generated this transaction.
     var isRecurringInstance: Bool { recurringRule != nil }
 }

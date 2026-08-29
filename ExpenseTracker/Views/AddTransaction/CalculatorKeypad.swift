@@ -76,6 +76,9 @@ struct CalculatorKeypad: View {
     }
 
     @ViewBuilder
+    /// One tappable key, wired to `handle(_:)` and labelled for VoiceOver.
+    /// - Parameter key: The key to render.
+    /// - Returns: The configured button.
     private func keyButton(_ key: Key) -> some View {
         let isConfirm = key == .confirm
         let disabled = isConfirm && !confirmEnabled
@@ -99,6 +102,9 @@ struct CalculatorKeypad: View {
     }
 
     @ViewBuilder
+    /// The glyph or text drawn inside a key.
+    /// - Parameter key: The key to render.
+    /// - Returns: The label view.
     private func keyLabel(_ key: Key) -> some View {
         switch key {
         case .digit(let value):
@@ -122,6 +128,10 @@ struct CalculatorKeypad: View {
         }
     }
 
+    /// Fill colour by key role — accent for confirm, lighter fills for
+    /// operators and digits.
+    /// - Parameter key: The key being drawn.
+    /// - Returns: Its background colour.
     private func background(for key: Key) -> Color {
         switch key {
         case .confirm: return .accentColor
@@ -130,6 +140,9 @@ struct CalculatorKeypad: View {
         }
     }
 
+    /// Text colour by key role.
+    /// - Parameter key: The key being drawn.
+    /// - Returns: Its foreground colour.
     private func foreground(for key: Key) -> Color {
         switch key {
         case .confirm: return .white
@@ -139,6 +152,9 @@ struct CalculatorKeypad: View {
         }
     }
 
+    /// Spoken label for a key, since most are symbols rather than words.
+    /// - Parameter key: The key to describe.
+    /// - Returns: The VoiceOver label.
     private func accessibilityLabel(for key: Key) -> String {
         switch key {
         case .digit(let value): return value
@@ -152,6 +168,9 @@ struct CalculatorKeypad: View {
         }
     }
 
+    /// Applies a keypress to the engine. Confirm evaluates first, then calls
+    /// `onConfirm`; every other key just mutates the expression.
+    /// - Parameter key: The key the user tapped.
     private func handle(_ key: Key) {
         switch key {
         case .digit(let value):

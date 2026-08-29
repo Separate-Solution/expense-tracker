@@ -20,6 +20,10 @@ struct SubscriptionsView: View {
             .reduce(Decimal.zero) { $0 + monthlyEquivalent(of: $1) }
     }
 
+    /// Normalises a rule's cost to a per-month figure so cadences can be
+    /// totalled together. Weeks use 4.345 (52 ÷ 12) and days use 30.
+    /// - Parameter rule: The rule to convert.
+    /// - Returns: Approximate monthly cost.
     private func monthlyEquivalent(of rule: RecurringRule) -> Decimal {
         let perPeriod = rule.amount / Decimal(max(1, rule.interval))
         switch rule.frequency {
@@ -102,6 +106,9 @@ struct SubscriptionsView: View {
         }
     }
 
+    /// Builds one row of the subscriptions list, with its swipe actions.
+    /// - Parameter rule: The rule to render.
+    /// - Returns: The configured row view.
     private func ruleRow(_ rule: RecurringRule) -> some View {
         Button {
             editingRule = rule
@@ -142,6 +149,9 @@ struct SubscriptionsView: View {
         }
     }
 
+    /// Cadence plus status — paused, finished, or when it next posts.
+    /// - Parameter rule: The rule to describe.
+    /// - Returns: E.g. "Every month · next Tomorrow".
     private func subtitle(for rule: RecurringRule) -> String {
         guard rule.isActive else { return "\(rule.summary) · paused" }
         guard let next = rule.nextOccurrence() else { return "\(rule.summary) · finished" }
@@ -278,6 +288,8 @@ struct RecurringRuleEditorView: View {
         .onAppear(perform: load)
     }
 
+    /// Fills the form from the rule being edited, or defaults a new rule to
+    /// the first account with a one-year end date ready to enable.
     private func load() {
         guard let rule else {
             accountID = accounts.first?.id
@@ -296,6 +308,9 @@ struct RecurringRuleEditorView: View {
         note = rule.note
     }
 
+    /// Creates or updates the rule and dismisses.
+    /// Editing rewrites not-yet-due generated transactions via
+    /// `RecurrenceEngine.applyEdits(of:in:)`; history is left alone.
     private func save() {
         let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
         let category = allCategories.first { $0.id == categoryID }

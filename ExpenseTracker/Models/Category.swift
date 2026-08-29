@@ -20,6 +20,15 @@ final class Category {
     @Relationship(deleteRule: .nullify, inverse: \RecurringRule.category)
     var recurringRules: [RecurringRule]? = []
 
+    /// Creates a category.
+    /// - Parameters:
+    ///   - id: Stable identifier; a fresh UUID unless restoring from a backup.
+    ///   - name: Display name.
+    ///   - emoji: Badge glyph.
+    ///   - colorHex: Badge colour; defaults to the first palette entry.
+    ///   - type: Whether it groups expenses or income.
+    ///   - sortIndex: Position within its type's list.
+    ///   - createdAt: Creation timestamp.
     init(
         id: UUID = UUID(),
         name: String,
@@ -39,6 +48,7 @@ final class Category {
         self.createdAt = createdAt
     }
 
+    /// Typed view of `typeRaw`; falls back to `.expense` on an unknown value.
     var type: TransactionType {
         get { TransactionType(rawValue: typeRaw) ?? .expense }
         set { typeRaw = newValue.rawValue }

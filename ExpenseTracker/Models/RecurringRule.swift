@@ -26,6 +26,21 @@ final class RecurringRule {
     @Relationship(deleteRule: .nullify, inverse: \Transaction.recurringRule)
     var transactions: [Transaction]? = []
 
+    /// Creates a recurring rule. Dates are normalised to day bounds so
+    /// occurrence maths never drifts by hours.
+    /// - Parameters:
+    ///   - id: Stable identifier; a fresh UUID unless restoring from a backup.
+    ///   - title: Title given to each generated transaction.
+    ///   - amount: Magnitude; the absolute value is stored.
+    ///   - type: Expense or income.
+    ///   - frequency: Day, week, month or year.
+    ///   - interval: Units per repeat; clamped to at least 1.
+    ///   - startDate: First occurrence, snapped to the start of that day.
+    ///   - endDate: Last day covered, snapped to the end of that day; nil runs forever.
+    ///   - note: Free-text note copied onto generated transactions.
+    ///   - account: Account to post into.
+    ///   - category: Category to tag generated transactions with.
+    ///   - createdAt: Creation timestamp.
     init(
         id: UUID = UUID(),
         title: String,
@@ -56,16 +71,19 @@ final class RecurringRule {
         self.createdAt = createdAt
     }
 
+    /// Typed view of `typeRaw`; falls back to `.expense` on an unknown value.
     var type: TransactionType {
         get { TransactionType(rawValue: typeRaw) ?? .expense }
         set { typeRaw = newValue.rawValue }
     }
 
+    /// Typed view of `frequencyRaw`; falls back to `.monthly` on an unknown value.
     var frequency: RecurrenceFrequency {
         get { RecurrenceFrequency(rawValue: frequencyRaw) ?? .monthly }
         set { frequencyRaw = newValue.rawValue }
     }
 
+    /// Human-readable cadence, e.g. "Every month" or "Every 2 weeks".
     var summary: String {
         interval == 1
             ? "Every \(frequency.unitLabel(interval: 1))"
@@ -86,6 +104,9 @@ final class RecurringRule {
         )
     }
 
+    /// Whether `date` falls inside the rule's start/end window.
+    /// - Parameter date: The date to test.
+    /// - Returns: True when the rule still covers that date.
     func isWithinRange(_ date: Date) -> Bool {
         guard date >= startDate.startOfDay else { return false }
         if let endDate { return date <= endDate }

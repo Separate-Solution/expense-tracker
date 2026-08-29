@@ -157,6 +157,7 @@ struct DataManagementView: View {
 
     // MARK: - Export
 
+    /// Writes every transaction to a timestamped CSV and opens the share sheet.
     private func exportCSV() {
         do {
             let csv = CSVService.exportString(transactions: transactions)
@@ -167,6 +168,7 @@ struct DataManagementView: View {
         }
     }
 
+    /// Writes a full JSON backup to a timestamped file and opens the share sheet.
     private func exportBackup() {
         do {
             let payload = try BackupService.makePayload(from: context)
@@ -180,6 +182,9 @@ struct DataManagementView: View {
 
     // MARK: - Import
 
+    /// Parses the chosen CSV into a plan and opens the mapping screen.
+    /// Nothing is written until the user confirms the mapping.
+    /// - Parameter result: Outcome of the file importer.
     private func handleCSVImport(_ result: Result<[URL], Error>) {
         switch result {
         case .failure(let error):
@@ -221,6 +226,10 @@ struct DataManagementView: View {
         }
     }
 
+    /// Turns an import summary into the alert body: counts, anything created,
+    /// and the first few skipped rows with a tally of the rest.
+    /// - Parameter summary: The result of the import.
+    /// - Returns: The message to show.
     private func describe(_ summary: CSVImportSummary) -> String {
         var lines = ["Imported \(summary.imported) transaction\(summary.imported == 1 ? "" : "s")."]
         if summary.skippedDuplicates > 0 {
@@ -248,6 +257,9 @@ struct DataManagementView: View {
         return lines.joined(separator: "\n")
     }
 
+    /// Decodes the chosen backup and asks for confirmation. Restoring is
+    /// destructive, so nothing is applied until the dialog is accepted.
+    /// - Parameter result: Outcome of the file importer.
     private func handleBackupSelection(_ result: Result<[URL], Error>) {
         switch result {
         case .failure(let error):
@@ -264,6 +276,8 @@ struct DataManagementView: View {
         }
     }
 
+    /// Replaces all current data with the confirmed backup and reports what
+    /// came back.
     private func performRestore() {
         guard let pendingRestore else { return }
         isWorking = true
@@ -283,6 +297,7 @@ struct DataManagementView: View {
         }
     }
 
+    /// Deletes everything and reseeds the default categories.
     private func eraseAll() {
         do {
             try BackupService.eraseAll(in: context, reseed: true)
@@ -299,6 +314,10 @@ struct DataManagementView: View {
         return try body(url)
     }
 
+    /// Presents the shared result alert.
+    /// - Parameters:
+    ///   - title: Alert title.
+    ///   - message: Alert body.
     private func showStatus(_ title: String, _ message: String) {
         statusTitle = title
         statusMessage = message
@@ -311,9 +330,11 @@ struct DataManagementView: View {
 struct ShareSheet: UIViewControllerRepresentable {
     let url: URL
 
+    /// Creates the share sheet for the staged file.
     func makeUIViewController(context: Context) -> UIActivityViewController {
         UIActivityViewController(activityItems: [url], applicationActivities: nil)
     }
 
+    /// No-op: the share sheet is configured once at creation.
     func updateUIViewController(_ controller: UIActivityViewController, context: Context) { }
 }

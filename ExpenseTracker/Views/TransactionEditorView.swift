@@ -131,6 +131,8 @@ struct TransactionEditorView: View {
         .onAppear(perform: load)
     }
 
+    /// Copies the transaction's stored values into the form's local state.
+    /// Runs on appear so editing always starts from what is persisted.
     private func load() {
         title = transaction.title
         type = transaction.type
@@ -141,6 +143,8 @@ struct TransactionEditorView: View {
         amount = transaction.amount
     }
 
+    /// Writes the form back to the transaction, stamps `updatedAt`, saves
+    /// and dismisses. The title is trimmed and the amount rounded first.
     private func save() {
         transaction.title = title.trimmingCharacters(in: .whitespacesAndNewlines)
         transaction.type = type
