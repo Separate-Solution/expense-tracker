@@ -7,13 +7,18 @@ struct BackupPayload: Codable {
     /// 2 dropped the required `emoji` field from categories in favour of
     /// `symbolName`. Older builds require `emoji`, so the bump makes them
     /// report "made by a newer version" instead of failing to decode.
-    static let currentFormatVersion = 2
+    ///
+    /// 3 added credit cards, along with the card link and kind on transactions.
+    /// Everything it adds is optional, so a version 2 backup still restores.
+    static let currentFormatVersion = 3
 
     var formatVersion: Int = BackupPayload.currentFormatVersion
     var exportedAt: Date = Date()
     var appVersion: String = ""
     var currencyCode: String = ""
     var accounts: [AccountDTO] = []
+    /// Absent in backups written before credit cards existed.
+    var creditCards: [CreditCardDTO]? = []
     var categories: [CategoryDTO] = []
     var recurringRules: [RecurringRuleDTO] = []
     var transactions: [TransactionDTO] = []
@@ -23,6 +28,21 @@ struct BackupPayload: Codable {
         var name: String
         var kind: String
         var openingBalance: Decimal
+        var colorHex: String
+        var symbolName: String
+        var isArchived: Bool
+        var sortIndex: Int
+        var note: String
+        var createdAt: Date
+    }
+
+    struct CreditCardDTO: Codable {
+        var id: UUID
+        var name: String
+        var creditLimit: Decimal
+        var statementDay: Int
+        var dueDay: Int
+        var openingOutstanding: Decimal
         var colorHex: String
         var symbolName: String
         var isArchived: Bool
@@ -59,6 +79,8 @@ struct BackupPayload: Codable {
         var lastPostedIndex: Int
         var createdAt: Date
         var accountID: UUID?
+        /// Absent in backups written before credit cards existed.
+        var creditCardID: UUID?
         var categoryID: UUID?
     }
 
@@ -71,7 +93,11 @@ struct BackupPayload: Codable {
         var note: String
         var createdAt: Date
         var updatedAt: Date
+        /// Absent in backups written before credit cards existed; "standard" then.
+        var kind: String?
         var accountID: UUID?
+        /// Absent in backups written before credit cards existed.
+        var creditCardID: UUID?
         var categoryID: UUID?
         var recurringRuleID: UUID?
     }
@@ -79,6 +105,7 @@ struct BackupPayload: Codable {
 
 struct BackupSummary {
     var accounts: Int
+    var creditCards: Int
     var categories: Int
     var recurringRules: Int
     var transactions: Int
@@ -127,6 +154,23 @@ enum BackupService {
             )
         }
 
+        payload.creditCards = try context.fetch(FetchDescriptor<CreditCard>()).map { card in
+            .init(
+                id: card.id,
+                name: card.name,
+                creditLimit: card.creditLimit,
+                statementDay: card.statementDay,
+                dueDay: card.dueDay,
+                openingOutstanding: card.openingOutstanding,
+                colorHex: card.colorHex,
+                symbolName: card.symbolName,
+                isArchived: card.isArchived,
+                sortIndex: card.sortIndex,
+                note: card.note,
+                createdAt: card.createdAt
+            )
+        }
+
         payload.categories = try context.fetch(FetchDescriptor<Category>()).map { category in
             .init(
                 id: category.id,
@@ -156,6 +200,7 @@ enum BackupService {
                 lastPostedIndex: rule.lastPostedIndex,
                 createdAt: rule.createdAt,
                 accountID: rule.account?.id,
+                creditCardID: rule.creditCard?.id,
                 categoryID: rule.category?.id
             )
         }
@@ -170,7 +215,9 @@ enum BackupService {
                 note: transaction.note,
                 createdAt: transaction.createdAt,
                 updatedAt: transaction.updatedAt,
+                kind: transaction.kindRaw,
                 accountID: transaction.account?.id,
+                creditCardID: transaction.creditCard?.id,
                 categoryID: transaction.category?.id,
                 recurringRuleID: transaction.recurringRule?.id
             )
@@ -217,6 +264,7 @@ enum BackupService {
         try context.delete(model: Transaction.self)
         try context.delete(model: RecurringRule.self)
         try context.delete(model: Category.self)
+        try context.delete(model: CreditCard.self)
         try context.delete(model: Account.self)
         try context.save()
 
@@ -236,6 +284,26 @@ enum BackupService {
             account.isArchived = dto.isArchived
             context.insert(account)
             accountsByID[dto.id] = account
+        }
+
+        var cardsByID: [UUID: CreditCard] = [:]
+        for dto in payload.creditCards ?? [] {
+            let card = CreditCard(
+                id: dto.id,
+                name: dto.name,
+                creditLimit: dto.creditLimit,
+                statementDay: dto.statementDay,
+                dueDay: dto.dueDay,
+                openingOutstanding: dto.openingOutstanding,
+                colorHex: dto.colorHex,
+                symbolName: dto.symbolName,
+                sortIndex: dto.sortIndex,
+                note: dto.note,
+                createdAt: dto.createdAt
+            )
+            card.isArchived = dto.isArchived
+            context.insert(card)
+            cardsByID[dto.id] = card
         }
 
         var categoriesByID: [UUID: Category] = [:]
@@ -268,6 +336,7 @@ enum BackupService {
                 endDate: dto.endDate,
                 note: dto.note,
                 account: dto.accountID.flatMap { accountsByID[$0] },
+                creditCard: dto.creditCardID.flatMap { cardsByID[$0] },
                 category: dto.categoryID.flatMap { categoriesByID[$0] },
                 createdAt: dto.createdAt
             )
@@ -285,7 +354,9 @@ enum BackupService {
                 type: TransactionType(rawValue: dto.type) ?? .expense,
                 date: dto.date,
                 note: dto.note,
+                kind: dto.kind.flatMap { TransactionKind(rawValue: $0) } ?? .standard,
                 account: dto.accountID.flatMap { accountsByID[$0] },
+                creditCard: dto.creditCardID.flatMap { cardsByID[$0] },
                 category: dto.categoryID.flatMap { categoriesByID[$0] },
                 recurringRule: dto.recurringRuleID.flatMap { rulesByID[$0] },
                 createdAt: dto.createdAt
@@ -302,6 +373,7 @@ enum BackupService {
 
         return BackupSummary(
             accounts: payload.accounts.count,
+            creditCards: (payload.creditCards ?? []).count,
             categories: payload.categories.count,
             recurringRules: payload.recurringRules.count,
             transactions: payload.transactions.count
@@ -313,6 +385,7 @@ enum BackupService {
         try context.delete(model: Transaction.self)
         try context.delete(model: RecurringRule.self)
         try context.delete(model: Category.self)
+        try context.delete(model: CreditCard.self)
         try context.delete(model: Account.self)
         try context.save()
         if reseed {

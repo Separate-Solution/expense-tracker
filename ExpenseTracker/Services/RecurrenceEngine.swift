@@ -23,6 +23,7 @@ enum RecurrenceEngine {
                     date: occurrence,
                     note: rule.note,
                     account: rule.account,
+                    creditCard: rule.creditCard,
                     category: rule.category,
                     recurringRule: rule
                 )

@@ -11,11 +11,12 @@ struct TransactionsView: View {
 
     @Query(sort: \Transaction.date, order: .reverse) private var transactions: [Transaction]
     @Query(sort: \Account.sortIndex) private var accounts: [Account]
+    @Query(sort: \CreditCard.sortIndex) private var cards: [CreditCard]
     @Query(sort: \Category.sortIndex) private var categories: [Category]
 
     @State private var searchText = ""
     @State private var typeFilter: TransactionType?
-    @State private var accountFilter: UUID?
+    @State private var sourceFilter: PaymentSource?
     @State private var categoryFilter: UUID?
     @State private var editingTransaction: Transaction?
     @State private var pendingDeletion: Transaction?
@@ -23,13 +24,13 @@ struct TransactionsView: View {
     @State private var isConfirmingBulkDeletion = false
 
     private var hasActiveFilter: Bool {
-        typeFilter != nil || accountFilter != nil || categoryFilter != nil
+        typeFilter != nil || sourceFilter != nil || categoryFilter != nil
     }
 
     private var filtered: [Transaction] {
         transactions.filter { transaction in
             if let typeFilter, transaction.type != typeFilter { return false }
-            if let accountFilter, transaction.account?.id != accountFilter { return false }
+            if let sourceFilter, transaction.paymentSource != sourceFilter { return false }
             if let categoryFilter, transaction.category?.id != categoryFilter { return false }
             guard !searchText.isEmpty else { return true }
             let needle = searchText.lowercased()
@@ -37,6 +38,7 @@ struct TransactionsView: View {
                 || transaction.note.lowercased().contains(needle)
                 || (transaction.category?.name.lowercased().contains(needle) ?? false)
                 || (transaction.account?.name.lowercased().contains(needle) ?? false)
+                || (transaction.creditCard?.name.lowercased().contains(needle) ?? false)
         }
     }
 
@@ -300,7 +302,7 @@ struct TransactionsView: View {
     /// Everything the filtered list depends on, so a change can prune the
     /// selection without recomputing the whole list to compare it.
     private var filterSignature: String {
-        [typeFilter?.rawValue ?? "", accountFilter?.uuidString ?? "",
+        [typeFilter?.rawValue ?? "", sourceFilter?.id ?? "",
          categoryFilter?.uuidString ?? "", searchText].joined(separator: "|")
     }
 
@@ -313,11 +315,13 @@ struct TransactionsView: View {
                 }
             }
 
-            Picker("Account", selection: $accountFilter) {
-                Text("All accounts").tag(UUID?.none)
-                ForEach(accounts) { account in
-                    Text(account.name).tag(Optional(account.id))
-                }
+            Menu("Paid with") {
+                PaymentSourcePicker(
+                    label: "Paid with",
+                    accounts: accounts,
+                    cards: cards,
+                    selection: $sourceFilter
+                )
             }
 
             Picker("Category", selection: $categoryFilter) {
@@ -331,7 +335,7 @@ struct TransactionsView: View {
                 Divider()
                 Button("Clear filters", systemImage: "xmark.circle") {
                     typeFilter = nil
-                    accountFilter = nil
+                    sourceFilter = nil
                     categoryFilter = nil
                 }
             }

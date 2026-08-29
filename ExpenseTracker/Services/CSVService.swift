@@ -5,6 +5,7 @@ struct CSVImportSummary {
     var imported: Int = 0
     var skippedDuplicates: Int = 0
     var createdAccounts: [String] = []
+    var createdCreditCards: [String] = []
     var createdCategories: [String] = []
     var failures: [String] = []
     var ignoredColumns: [String] = []
@@ -28,14 +29,15 @@ enum CSVError: LocalizedError {
 
 /// A transaction field that can be read from a CSV column.
 enum CSVField: String, CaseIterable, Identifiable {
-    case date, time, amount, type, title, category, account, accountKind, note, id
+    case date, time, amount, type, title, category, account, accountKind, creditCard, note, id
     case income, color, icon, emoji
 
     var id: String { rawValue }
 
     /// Fields offered on the mapping screen, in the order they're shown.
     static let assignable: [CSVField] = [
-        .date, .time, .amount, .type, .title, .category, .account, .accountKind, .note, .id
+        .date, .time, .amount, .type, .title, .category,
+        .account, .accountKind, .creditCard, .note, .id
     ]
 
     var label: String {
@@ -48,6 +50,7 @@ enum CSVField: String, CaseIterable, Identifiable {
         case .category: return "Category"
         case .account: return "Account"
         case .accountKind: return "Account Type"
+        case .creditCard: return "Credit Card"
         case .note: return "Note"
         case .id: return "ID"
         case .income: return "Income flag"
@@ -71,6 +74,7 @@ enum CSVField: String, CaseIterable, Identifiable {
         case .category: return "Transactions come in without a category."
         case .account: return "Everything goes into your first account."
         case .accountKind: return "Guessed from the account name."
+        case .creditCard: return "Nothing is charged to a credit card."
         case .note: return "Notes are left empty."
         case .id: return "Duplicates can't be detected, so importing this file twice adds it twice."
         default: return ""
@@ -89,6 +93,7 @@ enum CSVField: String, CaseIterable, Identifiable {
         case .category: return ["category", "categoryname"]
         case .account: return ["account", "accountname", "bank", "source"]
         case .accountKind: return ["accounttype", "accountkind"]
+        case .creditCard: return ["creditcard", "card", "cardname", "creditcardname"]
         case .note: return ["note", "notes", "memo", "comment"]
         case .id: return ["id", "uuid", "transactionid"]
         case .income: return ["income", "isincome"]
@@ -171,7 +176,7 @@ enum CSVService {
 
     static let exportHeader = [
         "Date", "Time", "Title", "Type", "Amount", "Currency",
-        "Account", "Account Type", "Category", "Note", "ID"
+        "Account", "Account Type", "Credit Card", "Category", "Note", "ID"
     ]
 
     // MARK: - Export
@@ -193,6 +198,7 @@ enum CSVService {
                 Formatters.currencyCode,
                 transaction.account?.name ?? "",
                 transaction.account?.kind.rawValue ?? "",
+                transaction.creditCard?.name ?? "",
                 transaction.category?.name ?? "",
                 transaction.note,
                 transaction.id.uuidString
@@ -301,6 +307,7 @@ enum CSVService {
         summary.ignoredColumns = plan.ignoredColumns(for: mapping)
 
         var accountCache = try existingAccountsByName(in: context)
+        var cardCache = try existingCreditCardsByName(in: context)
         var categoryCache = try existingCategoriesByKey(in: context)
         var seenIDs = try existingTransactionIDs(in: context)
 
@@ -347,14 +354,43 @@ enum CSVService {
             }
 
             let accountName = field(.account)
-            var account = defaultAccount
+            let cardName = field(.creditCard)
+
+            var creditCard: CreditCard?
+            if !cardName.isEmpty {
+                let key = cardName.lowercased()
+                if let existing = cardCache[key] {
+                    creditCard = existing
+                } else {
+                    // The file can't carry a limit or a billing cycle, so the
+                    // card comes in with the defaults and the cards list flags
+                    // it as needing a limit.
+                    let created = CreditCard(
+                        name: cardName,
+                        colorHex: Theme.paletteHexes[cardCache.count % Theme.paletteHexes.count],
+                        sortIndex: cardCache.count
+                    )
+                    context.insert(created)
+                    cardCache[key] = created
+                    creditCard = created
+                    summary.createdCreditCards.append(cardName)
+                }
+            }
+
+            // A row naming both is a bill payment — the export writes the card
+            // and the bank account it was paid from on the same line. A row
+            // naming only a card was charged to it, so no account is involved.
+            var account: Account? = creditCard == nil ? defaultAccount : nil
             if !accountName.isEmpty {
                 let key = accountName.lowercased()
                 if let existing = accountCache[key] {
                     account = existing
                 } else {
-                    let kind = AccountKind(rawValue: field(.accountKind).lowercased())
-                        ?? inferAccountKind(from: accountName)
+                    let rawKind = AccountKind(rawValue: field(.accountKind).lowercased())
+                    // `credit` is retired; a file still carrying it becomes a bank account.
+                    let kind = (rawKind?.isLegacyCreditKind ?? true)
+                        ? inferAccountKind(from: accountName)
+                        : (rawKind ?? .bank)
                     let created = Account(
                         name: accountName,
                         kind: kind,
@@ -367,6 +403,9 @@ enum CSVService {
                     summary.createdAccounts.append(accountName)
                 }
             }
+
+            let kind: TransactionKind =
+                (creditCard != nil && account != nil) ? .cardPayment : .standard
 
             let categoryName = field(.category)
             var category: Category?
@@ -406,7 +445,9 @@ enum CSVService {
                 type: type,
                 date: date,
                 note: field(.note),
+                kind: kind,
                 account: account,
+                creditCard: creditCard,
                 category: category
             )
             context.insert(transaction)
@@ -424,6 +465,13 @@ enum CSVService {
     private static func existingAccountsByName(in context: ModelContext) throws -> [String: Account] {
         let accounts = try context.fetch(FetchDescriptor<Account>())
         return Dictionary(accounts.map { ($0.name.lowercased(), $0) }, uniquingKeysWith: { first, _ in first })
+    }
+
+    /// Credit cards keyed by lowercased name, so an imported name reuses an
+    /// existing card instead of creating a near-duplicate.
+    private static func existingCreditCardsByName(in context: ModelContext) throws -> [String: CreditCard] {
+        let cards = try context.fetch(FetchDescriptor<CreditCard>())
+        return Dictionary(cards.map { ($0.name.lowercased(), $0) }, uniquingKeysWith: { first, _ in first })
     }
 
     /// Categories keyed by type and lowercased name — the same name can exist
@@ -583,14 +631,14 @@ enum CSVService {
     }
 
     /// Guesses an account kind from its name when the file does not say —
-    /// "wallet" reads as cash, "visa" as credit, everything else as bank.
+    /// "wallet" reads as cash, everything else a bank account. Card-sounding
+    /// names are no longer guessed at: credit cards come in through the
+    /// dedicated "Credit Card" column instead.
     /// - Parameter name: The account name from the file.
     /// - Returns: The inferred kind.
     private static func inferAccountKind(from name: String) -> AccountKind {
         let lowered = name.lowercased()
         if lowered.contains("cash") || lowered.contains("wallet") { return .cash }
-        if lowered.contains("card") || lowered.contains("credit") || lowered.contains("visa")
-            || lowered.contains("amex") || lowered.contains("mastercard") { return .credit }
         return .bank
     }
 

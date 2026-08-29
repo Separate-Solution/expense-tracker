@@ -1,42 +1,58 @@
 import SwiftUI
 import SwiftData
 
+/// Everything money sits in or is borrowed against: bank accounts and cash on
+/// one side, credit cards on the other.
 struct AccountsView: View {
 
     @Environment(\.modelContext) private var context
     @Query(sort: \Account.sortIndex) private var accounts: [Account]
+    @Query(sort: \CreditCard.sortIndex) private var cards: [CreditCard]
 
     @State private var editingAccount: Account?
-    @State private var isCreating = false
-    @State private var pendingDeletion: Account?
+    @State private var editingCard: CreditCard?
+    @State private var isCreatingAccount = false
+    @State private var isCreatingCard = false
+    @State private var pendingAccountDeletion: Account?
+    @State private var pendingCardDeletion: CreditCard?
 
     private var activeAccounts: [Account] { accounts.filter { !$0.isArchived } }
     private var archivedAccounts: [Account] { accounts.filter(\.isArchived) }
+    private var activeCards: [CreditCard] { cards.filter { !$0.isArchived } }
+    private var archivedCards: [CreditCard] { cards.filter(\.isArchived) }
 
-    /// Assets minus what is owed on credit cards.
+    private var hasArchived: Bool { !archivedAccounts.isEmpty || !archivedCards.isEmpty }
+
+    /// What is actually yours: money in accounts less everything owed on cards.
     private var netWorth: Decimal {
-        activeAccounts.reduce(Decimal.zero) { $0 + $1.currentBalance }
+        let assets = activeAccounts.reduce(Decimal.zero) { $0 + $1.currentBalance }
+        let debts = activeCards.reduce(Decimal.zero) { $0 + $1.outstanding }
+        return assets - debts
     }
 
     var body: some View {
         NavigationStack {
             List {
-                if !activeAccounts.isEmpty {
+                if !activeAccounts.isEmpty || !activeCards.isEmpty {
                     Section {
                         HStack {
                             Text("Net balance").font(.subheadline)
                             Spacer()
                             AmountText(amount: netWorth, font: .headline)
                         }
+                    } footer: {
+                        if !activeCards.isEmpty {
+                            Text("Account balances less what is owed on your cards.")
+                        }
                     }
                 }
 
-                Section("Accounts") {
+                Section("Bank Accounts") {
                     if activeAccounts.isEmpty {
                         EmptyStateView(
-                            symbol: "creditcard",
-                            title: "No accounts",
-                            message: "Add your bank accounts, credit cards and cash to see where money sits."
+                            symbol: "building.columns",
+                            title: "No bank accounts",
+                            message: "Add your bank accounts and cash to see where money sits."
                         )
                         .listRowBackground(Color.clear)
                     }
@@ -49,7 +65,7 @@ struct AccountsView: View {
                         .buttonStyle(.plain)
                         .swipeActions(edge: .trailing) {
                             Button(role: .destructive) {
-                                pendingDeletion = account
+                                pendingAccountDeletion = account
                             } label: {
                                 Label("Delete", systemImage: "trash")
                             }
@@ -64,7 +80,40 @@ struct AccountsView: View {
                     }
                 }
 
-                if !archivedAccounts.isEmpty {
+                Section("Credit Cards") {
+                    if activeCards.isEmpty {
+                        EmptyStateView(
+                            symbol: "creditcard",
+                            title: "No credit cards",
+                            message: "Add a card to track what you have spent on credit and when the bill is due."
+                        )
+                        .listRowBackground(Color.clear)
+                    }
+                    ForEach(activeCards) { card in
+                        Button {
+                            editingCard = card
+                        } label: {
+                            cardRow(card)
+                        }
+                        .buttonStyle(.plain)
+                        .swipeActions(edge: .trailing) {
+                            Button(role: .destructive) {
+                                pendingCardDeletion = card
+                            } label: {
+                                Label("Delete", systemImage: "trash")
+                            }
+                            Button {
+                                card.isArchived = true
+                                try? context.save()
+                            } label: {
+                                Label("Archive", systemImage: "archivebox")
+                            }
+                            .tint(.orange)
+                        }
+                    }
+                }
+
+                if hasArchived {
                     Section("Archived") {
                         ForEach(archivedAccounts) { account in
                             HStack {
@@ -78,56 +127,106 @@ struct AccountsView: View {
                                 .font(.caption)
                             }
                         }
+                        ForEach(archivedCards) { card in
+                            HStack {
+                                cardRow(card)
+                                Spacer()
+                                Button("Restore") {
+                                    card.isArchived = false
+                                    try? context.save()
+                                }
+                                .buttonStyle(.borderless)
+                                .font(.caption)
+                            }
+                        }
                     }
                 }
             }
             .navigationTitle("Accounts")
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button {
-                        isCreating = true
+                    Menu {
+                        Button("New Bank Account", systemImage: "building.columns") {
+                            isCreatingAccount = true
+                        }
+                        Button("New Credit Card", systemImage: "creditcard") {
+                            isCreatingCard = true
+                        }
                     } label: {
                         Image(systemName: "plus")
                     }
                 }
             }
-            .sheet(isPresented: $isCreating) {
+            .sheet(isPresented: $isCreatingAccount) {
                 AccountEditorView(account: nil)
+            }
+            .sheet(isPresented: $isCreatingCard) {
+                CreditCardEditorView(card: nil)
             }
             .sheet(item: $editingAccount) { account in
                 AccountEditorView(account: account)
             }
+            .sheet(item: $editingCard) { card in
+                CreditCardEditorView(card: card)
+            }
             .confirmationDialog(
-                deletionPrompt,
+                accountDeletionPrompt,
                 isPresented: Binding(
-                    get: { pendingDeletion != nil },
-                    set: { if !$0 { pendingDeletion = nil } }
+                    get: { pendingAccountDeletion != nil },
+                    set: { if !$0 { pendingAccountDeletion = nil } }
                 ),
                 titleVisibility: .visible
             ) {
                 Button("Delete account and transactions", role: .destructive) {
-                    if let pendingDeletion {
-                        context.delete(pendingDeletion)
+                    if let pendingAccountDeletion {
+                        context.delete(pendingAccountDeletion)
                         try? context.save()
                     }
-                    pendingDeletion = nil
+                    pendingAccountDeletion = nil
                 }
-                Button("Cancel", role: .cancel) { pendingDeletion = nil }
+                Button("Cancel", role: .cancel) { pendingAccountDeletion = nil }
             } message: {
                 Text("Archiving keeps the history and hides the account instead.")
+            }
+            .confirmationDialog(
+                cardDeletionPrompt,
+                isPresented: Binding(
+                    get: { pendingCardDeletion != nil },
+                    set: { if !$0 { pendingCardDeletion = nil } }
+                ),
+                titleVisibility: .visible
+            ) {
+                Button("Delete card and transactions", role: .destructive) {
+                    if let pendingCardDeletion {
+                        context.delete(pendingCardDeletion)
+                        try? context.save()
+                    }
+                    pendingCardDeletion = nil
+                }
+                Button("Cancel", role: .cancel) { pendingCardDeletion = nil }
+            } message: {
+                Text("Archiving keeps the history and hides the card instead.")
             }
         }
     }
 
-    private var deletionPrompt: String {
-        guard let pendingDeletion else { return "Delete account?" }
-        let count = pendingDeletion.transactions?.count ?? 0
+    private var accountDeletionPrompt: String {
+        guard let pendingAccountDeletion else { return "Delete account?" }
+        let count = pendingAccountDeletion.transactions?.count ?? 0
         return count == 0
-            ? "Delete “\(pendingDeletion.name)”?"
-            : "Delete “\(pendingDeletion.name)” and its \(count) transaction\(count == 1 ? "" : "s")?"
+            ? "Delete \u{201C}\(pendingAccountDeletion.name)\u{201D}?"
+            : "Delete \u{201C}\(pendingAccountDeletion.name)\u{201D} and its \(count) transaction\(count == 1 ? "" : "s")?"
     }
 
-    /// Builds one row of the accounts list: badge, name, kind and balance.
+    private var cardDeletionPrompt: String {
+        guard let pendingCardDeletion else { return "Delete card?" }
+        let count = pendingCardDeletion.transactions?.count ?? 0
+        return count == 0
+            ? "Delete \u{201C}\(pendingCardDeletion.name)\u{201D}?"
+            : "Delete \u{201C}\(pendingCardDeletion.name)\u{201D} and its \(count) transaction\(count == 1 ? "" : "s")?"
+    }
+
+    /// Builds one row of the bank accounts list: badge, name, kind and balance.
     /// - Parameter account: The account to render.
     /// - Returns: The configured row view.
     private func accountRow(_ account: Account) -> some View {
@@ -140,16 +239,74 @@ struct AccountsView: View {
                     .foregroundStyle(.secondary)
             }
             Spacer(minLength: 8)
-            VStack(alignment: .trailing, spacing: 2) {
-                AmountText(amount: account.currentBalance, font: .callout)
-                if account.kind.isLiability, account.currentBalance < 0 {
-                    Text("owed")
+            AmountText(amount: account.currentBalance, font: .callout)
+        }
+        .contentShape(Rectangle())
+    }
+
+    /// Builds one row of the credit cards list: what is owed, what is left to
+    /// spend, and a nudge when no limit has been entered yet.
+    /// - Parameter card: The card to render.
+    /// - Returns: The configured row view.
+    private func cardRow(_ card: CreditCard) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 12) {
+                AccountBadge(symbolName: card.symbolName, colorHex: card.colorHex)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(card.name).font(.body).lineLimit(1)
+                    Text("Due \(Formatters.ordinalDay(card.dueDay)) \u{00B7} closes \(Formatters.ordinalDay(card.statementDay))")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer(minLength: 8)
+                VStack(alignment: .trailing, spacing: 2) {
+                    Text(Formatters.currencyMagnitude(card.outstanding))
+                        .font(.callout.weight(.medium))
+                        .monospacedDigit()
+                        .foregroundStyle(card.outstanding > 0 ? Theme.expense : .primary)
+                    Text(card.outstanding > 0 ? "owed" : "clear")
                         .font(.caption2)
                         .foregroundStyle(.secondary)
                 }
             }
+
+            if card.hasCreditLimit {
+                CreditUsageBar(card: card)
+            } else {
+                Text("No credit limit set yet \u{2014} tap to add one.")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
         }
+        .padding(.vertical, 2)
         .contentShape(Rectangle())
+    }
+}
+
+/// The thin bar and caption showing how much of a card's limit is used.
+struct CreditUsageBar: View {
+    let card: CreditCard
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            GeometryReader { proxy in
+                ZStack(alignment: .leading) {
+                    Capsule().fill(Color(.tertiarySystemFill))
+                    Capsule()
+                        .fill(Color(hex: card.colorHex))
+                        .frame(width: max(2, proxy.size.width * card.utilisation))
+                }
+            }
+            .frame(height: 5)
+
+            HStack {
+                Text("\(Formatters.currencyMagnitude(card.availableCredit)) available")
+                Spacer()
+                Text("of \(Formatters.currencyMagnitude(card.creditLimit))")
+            }
+            .font(.caption2)
+            .foregroundStyle(.secondary)
+        }
     }
 }
 
@@ -183,7 +340,7 @@ struct AccountEditorView: View {
                     TextField("Name", text: $name)
 
                     Picker("Type", selection: $kind) {
-                        ForEach(AccountKind.allCases) { option in
+                        ForEach(AccountKind.selectableCases) { option in
                             Label(option.title, systemImage: option.symbolName).tag(option)
                         }
                     }
@@ -201,14 +358,12 @@ struct AccountEditorView: View {
                                 .foregroundStyle(.secondary)
                         }
                     }
-                    Toggle("Negative (money owed)", isOn: Binding(
+                    Toggle("Negative (overdrawn)", isOn: Binding(
                         get: { openingBalance < 0 },
                         set: { openingBalance = $0 ? -abs(openingBalance) : abs(openingBalance) }
                     ))
                 } footer: {
-                    Text(kind == .credit
-                         ? "For a credit card, enter what you currently owe and switch on “money owed”."
-                         : "The balance this account had before you started tracking here.")
+                    Text("The balance this account had before you started tracking here.")
                 }
 
                 Section("Colour") {
@@ -220,7 +375,7 @@ struct AccountEditorView: View {
                         .lineLimit(2...4)
                 }
             }
-            .navigationTitle(isNew ? "New Account" : "Edit Account")
+            .navigationTitle(isNew ? "New Bank Account" : "Edit Bank Account")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {

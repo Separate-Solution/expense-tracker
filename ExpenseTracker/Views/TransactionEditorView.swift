@@ -12,11 +12,13 @@ struct TransactionEditorView: View {
     @Query(sort: \Category.sortIndex) private var allCategories: [Category]
     @Query(filter: #Predicate<Account> { !$0.isArchived }, sort: \Account.sortIndex)
     private var accounts: [Account]
+    @Query(filter: #Predicate<CreditCard> { !$0.isArchived }, sort: \CreditCard.sortIndex)
+    private var cards: [CreditCard]
 
     @State private var title = ""
     @State private var type: TransactionType = .expense
     @State private var categoryID: UUID?
-    @State private var accountID: UUID?
+    @State private var source: PaymentSource?
     @State private var date = Date()
     @State private var note = ""
     @State private var amount: Decimal = .zero
@@ -72,12 +74,15 @@ struct TransactionEditorView: View {
                         }
                     }
 
-                    Picker("Account", selection: $accountID) {
-                        Text("None").tag(UUID?.none)
-                        ForEach(accounts) { account in
-                            Text(account.name).tag(Optional(account.id))
-                        }
-                    }
+                    // A bill payment always leaves a bank account and always
+                    // lands on its card, so only the account is up for change.
+                    PaymentSourcePicker(
+                        label: transaction.isCardPayment ? "Paid from" : "Paid with",
+                        accounts: accounts,
+                        cards: transaction.isCardPayment ? [] : cards,
+                        allowsNone: !transaction.isCardPayment,
+                        selection: $source
+                    )
 
                     DateTimeRow(label: "Date & Time", selection: $date)
                 }
@@ -85,6 +90,17 @@ struct TransactionEditorView: View {
                 Section("Note") {
                     TextField("Optional", text: $note, axis: .vertical)
                         .lineLimit(2...5)
+                }
+
+                if transaction.isCardPayment, let card = transaction.creditCard {
+                    Section {
+                        Label("Bill payment to \(card.name)", systemImage: "creditcard")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    } footer: {
+                        Text("This clears card debt rather than being new spending, "
+                             + "so it stays out of the month\u{2019}s income and expense totals.")
+                    }
                 }
 
                 if let rule = transaction.recurringRule {
@@ -137,7 +153,7 @@ struct TransactionEditorView: View {
         title = transaction.title
         type = transaction.type
         categoryID = transaction.category?.id
-        accountID = transaction.account?.id
+        source = transaction.paymentSource
         date = transaction.date
         note = transaction.note
         amount = transaction.amount
@@ -152,7 +168,13 @@ struct TransactionEditorView: View {
         transaction.date = date
         transaction.note = note
         transaction.category = allCategories.first { $0.id == categoryID }
-        transaction.account = accounts.first { $0.id == accountID }
+        if transaction.isCardPayment {
+            // A bill payment's card is fixed; only the paying account can move.
+            transaction.account = PaymentSourceResolver.account(source, in: accounts)
+        } else {
+            transaction.account = PaymentSourceResolver.account(source, in: accounts)
+            transaction.creditCard = PaymentSourceResolver.card(source, in: cards)
+        }
         transaction.updatedAt = Date()
         try? context.save()
         dismiss()

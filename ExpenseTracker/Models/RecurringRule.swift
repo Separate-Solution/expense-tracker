@@ -20,6 +20,8 @@ final class RecurringRule {
     var createdAt: Date = Date()
 
     var account: Account?
+    /// Set instead of `account` when the charge lands on a credit card.
+    var creditCard: CreditCard?
     var category: Category?
 
     /// Generated transactions are kept if the rule is deleted, so history survives.
@@ -38,7 +40,8 @@ final class RecurringRule {
     ///   - startDate: First occurrence, snapped to the start of that day.
     ///   - endDate: Last day covered, snapped to the end of that day; nil runs forever.
     ///   - note: Free-text note copied onto generated transactions.
-    ///   - account: Account to post into.
+    ///   - account: Bank account to post into.
+    ///   - creditCard: Credit card to charge instead of a bank account.
     ///   - category: Category to tag generated transactions with.
     ///   - createdAt: Creation timestamp.
     init(
@@ -52,6 +55,7 @@ final class RecurringRule {
         endDate: Date? = nil,
         note: String = "",
         account: Account? = nil,
+        creditCard: CreditCard? = nil,
         category: Category? = nil,
         createdAt: Date = Date()
     ) {
@@ -65,11 +69,23 @@ final class RecurringRule {
         self.endDate = endDate?.endOfDay
         self.note = note
         self.account = account
+        self.creditCard = creditCard
         self.category = category
         self.isActive = true
         self.lastPostedIndex = -1
         self.createdAt = createdAt
     }
+
+    /// Where the generated transactions are charged, for the pickers that offer
+    /// accounts and cards in one list.
+    var paymentSource: PaymentSource? {
+        if let creditCard { return .creditCard(creditCard.id) }
+        if let account { return .account(account.id) }
+        return nil
+    }
+
+    /// Name of the account or card charged, for rows that show it.
+    var sourceName: String? { creditCard?.name ?? account?.name }
 
     /// Typed view of `typeRaw`; falls back to `.expense` on an unknown value.
     var type: TransactionType {

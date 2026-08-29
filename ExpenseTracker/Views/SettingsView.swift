@@ -11,6 +11,8 @@ struct SettingsView: View {
 
     @Query(filter: #Predicate<Account> { !$0.isArchived }, sort: \Account.sortIndex)
     private var accounts: [Account]
+    @Query(filter: #Predicate<CreditCard> { !$0.isArchived }, sort: \CreditCard.sortIndex)
+    private var cards: [CreditCard]
     @Query private var transactions: [Transaction]
     @Query private var categories: [Category]
     @Query private var rules: [RecurringRule]
@@ -64,11 +66,20 @@ struct SettingsView: View {
 
                     Picker(selection: $defaultAccountID) {
                         Text("Most recently used").tag("")
-                        ForEach(accounts) { account in
-                            Text(account.name).tag(account.id.uuidString)
+                        Section("Bank Accounts") {
+                            ForEach(accounts) { account in
+                                Text(account.name)
+                                    .tag(PaymentSourceResolver.encode(.account(account.id)))
+                            }
+                        }
+                        Section("Credit Cards") {
+                            ForEach(cards) { card in
+                                Text(card.name)
+                                    .tag(PaymentSourceResolver.encode(.creditCard(card.id)))
+                            }
                         }
                     } label: {
-                        Label("Default account", systemImage: "wallet.pass")
+                        Label("Default payment source", systemImage: "wallet.pass")
                     }
                     .pickerStyle(.menu)
                 } header: {
@@ -87,7 +98,8 @@ struct SettingsView: View {
 
                 Section {
                     LabeledContent("Transactions", value: "\(transactions.count)")
-                    LabeledContent("Accounts", value: "\(accounts.count)")
+                    LabeledContent("Bank accounts", value: "\(accounts.count)")
+                    LabeledContent("Credit cards", value: "\(cards.count)")
                     LabeledContent("Version", value: appVersion)
                 } header: {
                     Text("About")
