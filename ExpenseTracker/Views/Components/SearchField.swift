@@ -22,6 +22,7 @@ struct SearchField: View {
                 .textInputAutocapitalization(.never)
                 .submitLabel(.search)
                 .focused($isFocused)
+                .onSubmit { isFocused = false }
 
             if !text.isEmpty {
                 Button {
@@ -37,10 +38,12 @@ struct SearchField: View {
         .padding(.horizontal, 12)
         .padding(.vertical, 10)
         .background(
+            // The focus tap lives behind the row rather than over it: a gesture on
+            // the whole HStack competes with the clear button's own tap.
             RoundedRectangle(cornerRadius: 12, style: .continuous)
                 .fill(Color(.tertiarySystemFill))
+                .contentShape(Rectangle())
+                .onTapGesture { isFocused = true }
         )
-        .contentShape(Rectangle())
-        .onTapGesture { isFocused = true }
     }
 }

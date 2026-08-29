@@ -48,82 +48,84 @@ struct TransactionsView: View {
 
     var body: some View {
         NavigationStack {
-            VStack(spacing: 0) {
-                SearchField(text: $searchText, prompt: "Search transactions")
-                    .padding(.horizontal, 16)
-                    .padding(.bottom, 8)
-
-                // One List for both states, rather than swapping in a ScrollView when
-                // empty: the navigation bar binds its large-title behaviour to a single
-                // scroll view, and a branch that replaces it leaves the title collapsed.
-                List {
-                    if filtered.isEmpty {
-                        Section {
-                            EmptyStateView(
-                                symbol: transactions.isEmpty ? "tray" : "line.3.horizontal.decrease.circle",
-                                title: transactions.isEmpty ? "No transactions yet" : "Nothing matches",
-                                message: transactions.isEmpty
-                                    ? "Tap the + button to log your first one."
-                                    : "Try clearing the search or filters."
-                            )
-                            .padding(.top, 40)
-                            .frame(maxWidth: .infinity)
-                            .listRowBackground(Color.clear)
-                            .listRowSeparator(.hidden)
-                        }
-                    } else {
-                        Section {
-                            HStack {
-                                Text("\(filtered.count) transaction\(filtered.count == 1 ? "" : "s")")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                                Spacer()
-                                AmountText(amount: filteredTotal, font: .caption)
-                            }
-                            .listRowBackground(Color.clear)
-                        }
-
-                        ForEach(sections, id: \.date) { section in
-                            Section {
-                                ForEach(section.items) { transaction in
-                                    Button {
-                                        editingTransaction = transaction
-                                    } label: {
-                                        TransactionRow(transaction: transaction)
-                                    }
-                                    .buttonStyle(.plain)
-                                    .swipeActions(edge: .trailing) {
-                                        Button(role: .destructive) {
-                                            pendingDeletion = transaction
-                                        } label: {
-                                            Label("Delete", systemImage: "trash")
-                                        }
-                                    }
-                                }
-                            } header: {
-                                HStack {
-                                    Text(Formatters.relativeDayLabel(for: section.date))
-                                    Spacer()
-                                    Text(Formatters.signedCurrency(
-                                        section.items.reduce(Decimal.zero) { $0 + $1.signedAmount }
-                                    ))
-                                    .monospacedDigit()
-                                }
-                                .font(.caption)
-                                .textCase(nil)
-                            }
-                        }
-
-                        // Keeps the last row clear of the floating button.
-                        Color.clear
-                            .frame(height: 70)
-                            .listRowBackground(Color.clear)
-                            .listRowSeparator(.hidden)
-                    }
+            // One List for both states, rather than swapping in a ScrollView when
+            // empty: the navigation bar binds its large-title behaviour to a single
+            // scroll view, and a branch that replaces it leaves the title collapsed.
+            // The List also has to be the stack's direct child — wrapping it in a
+            // VStack to pin the search box stops the title collapsing on scroll.
+            List {
+                Section {
+                    SearchField(text: $searchText, prompt: "Search transactions")
+                        .listRowBackground(Color.clear)
+                        .listRowSeparator(.hidden)
+                        .listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 4, trailing: 16))
                 }
-                .listStyle(.insetGrouped)
+
+                if filtered.isEmpty {
+                    Section {
+                        EmptyStateView(
+                            symbol: transactions.isEmpty ? "tray" : "line.3.horizontal.decrease.circle",
+                            title: transactions.isEmpty ? "No transactions yet" : "Nothing matches",
+                            message: transactions.isEmpty
+                                ? "Tap the + button to log your first one."
+                                : "Try clearing the search or filters."
+                        )
+                        .padding(.top, 40)
+                        .frame(maxWidth: .infinity)
+                        .listRowBackground(Color.clear)
+                        .listRowSeparator(.hidden)
+                    }
+                } else {
+                    Section {
+                        HStack {
+                            Text("\(filtered.count) transaction\(filtered.count == 1 ? "" : "s")")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                            Spacer()
+                            AmountText(amount: filteredTotal, font: .caption)
+                        }
+                        .listRowBackground(Color.clear)
+                    }
+
+                    ForEach(sections, id: \.date) { section in
+                        Section {
+                            ForEach(section.items) { transaction in
+                                Button {
+                                    editingTransaction = transaction
+                                } label: {
+                                    TransactionRow(transaction: transaction)
+                                }
+                                .buttonStyle(.plain)
+                                .swipeActions(edge: .trailing) {
+                                    Button(role: .destructive) {
+                                        pendingDeletion = transaction
+                                    } label: {
+                                        Label("Delete", systemImage: "trash")
+                                    }
+                                }
+                            }
+                        } header: {
+                            HStack {
+                                Text(Formatters.relativeDayLabel(for: section.date))
+                                Spacer()
+                                Text(Formatters.signedCurrency(
+                                    section.items.reduce(Decimal.zero) { $0 + $1.signedAmount }
+                                ))
+                                .monospacedDigit()
+                            }
+                            .font(.caption)
+                            .textCase(nil)
+                        }
+                    }
+
+                    // Keeps the last row clear of the floating button.
+                    Color.clear
+                        .frame(height: 70)
+                        .listRowBackground(Color.clear)
+                        .listRowSeparator(.hidden)
+                }
             }
-            .background(Color(.systemGroupedBackground))
+            .listStyle(.insetGrouped)
             .navigationTitle("Transactions")
             .navigationBarTitleDisplayMode(.large)
             .toolbar {
