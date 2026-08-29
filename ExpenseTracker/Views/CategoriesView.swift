@@ -9,7 +9,7 @@ struct CategoriesView: View {
     @State private var type: TransactionType = .expense
     @State private var editingCategory: Category?
     @State private var isCreating = false
-    @State private var pendingDeletion: Category?
+    @State private var pendingDeletion: [Category] = []
 
     private var visible: [Category] {
         categories.filter { $0.type == type }
@@ -61,7 +61,7 @@ struct CategoriesView: View {
                     .buttonStyle(.plain)
                     .swipeActions(edge: .trailing) {
                         Button(role: .destructive) {
-                            pendingDeletion = category
+                            pendingDeletion = [category]
                         } label: {
                             Label("Delete", systemImage: "trash")
                         }
@@ -97,37 +97,40 @@ struct CategoriesView: View {
         .confirmationDialog(
             deletionPrompt,
             isPresented: Binding(
-                get: { pendingDeletion != nil },
-                set: { if !$0 { pendingDeletion = nil } }
+                get: { !pendingDeletion.isEmpty },
+                set: { if !$0 { pendingDeletion = [] } }
             ),
             titleVisibility: .visible
         ) {
             Button("Delete", role: .destructive) {
-                if let pendingDeletion {
-                    context.delete(pendingDeletion)
-                    try? context.save()
+                for category in pendingDeletion {
+                    context.delete(category)
                 }
-                pendingDeletion = nil
+                try? context.save()
+                pendingDeletion = []
             }
-            Button("Cancel", role: .cancel) { pendingDeletion = nil }
+            Button("Cancel", role: .cancel) { pendingDeletion = [] }
         } message: {
             Text("The transactions stay, but they become uncategorized. Hiding it instead keeps them labelled.")
         }
     }
 
     private var deletionPrompt: String {
-        guard let pendingDeletion else { return "Delete category?" }
-        let count = pendingDeletion.transactions?.count ?? 0
-        return count == 0
-            ? "Delete “\(pendingDeletion.name)”?"
-            : "Delete “\(pendingDeletion.name)” used by \(count) transaction\(count == 1 ? "" : "s")?"
+        guard let first = pendingDeletion.first else { return "Delete category?" }
+        let uses = pendingDeletion.reduce(0) { $0 + ($1.transactions?.count ?? 0) }
+        let subject = pendingDeletion.count == 1
+            ? "“\(first.name)”"
+            : "\(pendingDeletion.count) categories"
+        return uses == 0
+            ? "Delete \(subject)?"
+            : "Delete \(subject) used by \(uses) transaction\(uses == 1 ? "" : "s")?"
     }
 
     /// Edit mode deletes go through the same confirmation as the swipe action —
-    /// the rows shown are `visible`, not the full `categories` query.
+    /// the rows shown are `visible`, not the full `categories` query, and a
+    /// single gesture can select more than one row.
     private func confirmDeletion(at offsets: IndexSet) {
-        guard let index = offsets.first else { return }
-        pendingDeletion = visible[index]
+        pendingDeletion = offsets.map { visible[$0] }
     }
 
     private func move(from source: IndexSet, to destination: Int) {
