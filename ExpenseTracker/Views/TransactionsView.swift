@@ -126,6 +126,11 @@ struct TransactionsView: View {
                 }
             }
             .listStyle(.insetGrouped)
+            // The custom search box doesn't get `.searchable`'s built-in
+            // dismiss-on-scroll. `.immediately` rather than `.interactively`:
+            // the latter only tracks a downward drag toward the keyboard, so
+            // scrolling up through results would leave it covering them.
+            .scrollDismissesKeyboard(.immediately)
             .navigationTitle("Transactions")
             .navigationBarTitleDisplayMode(.large)
             .toolbar {
