@@ -72,4 +72,25 @@ final class Transaction {
 
     /// True when a recurring rule generated this transaction.
     var isRecurringInstance: Bool { recurringRule != nil }
+
+    /// An unsaved copy of this transaction, ready to insert into a context.
+    ///
+    /// The copy gets a fresh id and creation stamp but keeps the original's
+    /// date and time. It is deliberately *not* tied to the recurring rule —
+    /// only the recurrence engine posts occurrences of a rule, so a hand-made
+    /// duplicate stands on its own.
+    /// - Parameter createdAt: Creation stamp for the copy; defaults to now.
+    /// - Returns: The new, uninserted transaction.
+    func duplicated(createdAt: Date = Date()) -> Transaction {
+        Transaction(
+            title: title,
+            amount: amount,
+            type: type,
+            date: date,
+            note: note,
+            account: account,
+            category: category,
+            createdAt: createdAt
+        )
+    }
 }

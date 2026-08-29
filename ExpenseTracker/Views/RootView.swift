@@ -12,6 +12,9 @@ struct RootView: View {
 
     @State private var selectedTab: Tab = .home
     @State private var isAddingTransaction = false
+    /// True while the transactions list is in multi-select mode, which puts its
+    /// own action bar where the floating button sits.
+    @State private var isSelectingTransactions = false
 
     /// Clears the tab bar so the floating button sits above it rather than on it.
     private let floatingButtonInset: CGFloat = 78
@@ -23,7 +26,7 @@ struct RootView: View {
                     .tabItem { Label("Home", systemImage: "house") }
                     .tag(Tab.home)
 
-                TransactionsView()
+                TransactionsView(isSelecting: $isSelectingTransactions)
                     .tabItem { Label("Transactions", systemImage: "list.bullet") }
                     .tag(Tab.transactions)
 
@@ -36,7 +39,7 @@ struct RootView: View {
                     .tag(Tab.settings)
             }
 
-            if selectedTab == .home || selectedTab == .transactions {
+            if selectedTab == .home || (selectedTab == .transactions && !isSelectingTransactions) {
                 FloatingAddButton { isAddingTransaction = true }
                     .padding(.trailing, 20)
                     .padding(.bottom, floatingButtonInset)
@@ -44,6 +47,8 @@ struct RootView: View {
             }
         }
         .animation(.snappy(duration: 0.2), value: selectedTab)
+        .animation(.snappy(duration: 0.2), value: isSelectingTransactions)
+        .onChange(of: selectedTab) { _, _ in isSelectingTransactions = false }
         .ignoresSafeArea(.keyboard, edges: .bottom)
         .sheet(isPresented: $isAddingTransaction) {
             AddTransactionFlow()

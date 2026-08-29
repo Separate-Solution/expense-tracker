@@ -62,7 +62,7 @@ struct DataManagementView: View {
             } header: {
                 Text("CSV")
             } footer: {
-                Text("Columns: Date, Title, Type, Amount, Currency, Account, Account Type, Category, Note, ID. "
+                Text("Columns: Date, Time, Title, Type, Amount, Currency, Account, Account Type, Category, Note, ID. "
                      + "Importing any other file works too — you'll get to check which column feeds which field before anything is saved. "
                      + "Accounts and categories in the file are created if they don't exist, and rows whose ID already exists are skipped.")
             }
