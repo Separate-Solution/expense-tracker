@@ -15,6 +15,7 @@ struct SearchField: View {
         HStack(spacing: 8) {
             Image(systemName: "magnifyingglass")
                 .foregroundStyle(.secondary)
+                .accessibilityHidden(true)
 
             TextField(prompt, text: $text)
                 .textFieldStyle(.plain)
@@ -30,6 +31,8 @@ struct SearchField: View {
                 } label: {
                     Image(systemName: "xmark.circle.fill")
                         .foregroundStyle(.secondary)
+                        .frame(width: 24, height: 24)
+                        .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel("Clear search")
@@ -42,7 +45,6 @@ struct SearchField: View {
             // the whole HStack competes with the clear button's own tap.
             RoundedRectangle(cornerRadius: 12, style: .continuous)
                 .fill(Color(.tertiarySystemFill))
-                .contentShape(Rectangle())
                 .onTapGesture { isFocused = true }
         )
     }
