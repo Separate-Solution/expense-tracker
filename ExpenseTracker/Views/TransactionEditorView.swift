@@ -72,10 +72,17 @@ struct TransactionEditorView: View {
                 Section("Details") {
                     TextField("Title", text: $title)
 
-                    Picker("Category", selection: $categoryID) {
-                        Text("Uncategorized").tag(UUID?.none)
-                        ForEach(categories) { category in
-                            Label(category.name, systemImage: category.symbol).tag(Optional(category.id))
+                    // A bill payment isn't spending, so it has no category to
+                    // put it under. Offering one would file it in a breakdown
+                    // that deliberately ignores it, and let a category filter
+                    // surface a row that reads "Card payment".
+                    if !transaction.isCardPayment {
+                        Picker("Category", selection: $categoryID) {
+                            Text("Uncategorized").tag(UUID?.none)
+                            ForEach(categories) { category in
+                                Label(category.name, systemImage: category.symbol)
+                                    .tag(Optional(category.id))
+                            }
                         }
                     }
 
@@ -174,7 +181,9 @@ struct TransactionEditorView: View {
         transaction.amount = amount.roundedToCurrency
         transaction.date = date
         transaction.note = note
-        transaction.category = allCategories.first { $0.id == categoryID }
+        transaction.category = transaction.isCardPayment
+            ? nil
+            : allCategories.first { $0.id == categoryID }
         if transaction.isCardPayment {
             // A bill payment's card is fixed; only the paying account can move.
             transaction.account = PaymentSourceResolver.account(source, in: accounts)

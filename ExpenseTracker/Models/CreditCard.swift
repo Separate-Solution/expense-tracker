@@ -165,12 +165,18 @@ final class CreditCard {
 
     /// Charges made since the last statement closed — what the *next* bill will
     /// be built from. Payments are left out; they settle the previous bill.
+    ///
+    /// Stops at `date` rather than running to the end of the cycle, matching
+    /// `outstanding(asOf:)`: a charge scheduled for later this cycle will be on
+    /// that bill, but it has not been spent yet, and the overview already lists
+    /// it under Upcoming.
     /// - Parameter date: Reference point; defaults to now.
-    /// - Returns: The unbilled spend on the card.
+    /// - Returns: The unbilled spend on the card so far.
     func currentCycleSpend(asOf date: Date = .now) -> Decimal {
         let cycle = currentCycle(asOf: date)
+        let cutoff = date.endOfDay
         return (transactions ?? [])
-            .filter { $0.kind != .cardPayment && cycle.contains($0.date) }
+            .filter { $0.kind != .cardPayment && cycle.contains($0.date) && $0.date <= cutoff }
             .reduce(Decimal.zero) { $0 + $1.creditCardImpact }
     }
 
