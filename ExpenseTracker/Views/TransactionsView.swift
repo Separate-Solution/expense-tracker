@@ -338,14 +338,13 @@ struct TransactionsView: View {
                 }
             }
 
-            Menu("Paid with") {
-                PaymentSourcePicker(
-                    label: "Paid with",
-                    accounts: accounts,
-                    cards: cards,
-                    selection: $sourceFilter
-                )
-            }
+            PaymentSourcePicker(
+                label: "Paid with",
+                accounts: accounts,
+                cards: cards,
+                noneLabel: "All sources",
+                selection: $sourceFilter
+            )
 
             Picker("Category", selection: $categoryFilter) {
                 Text("All categories").tag(UUID?.none)

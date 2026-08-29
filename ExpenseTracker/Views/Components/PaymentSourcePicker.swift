@@ -9,12 +9,15 @@ struct PaymentSourcePicker: View {
     let cards: [CreditCard]
     /// Whether a transaction is allowed to have no source at all.
     var allowsNone: Bool = true
+    /// What the empty choice is called. On an editor it means "no source"; as a
+    /// filter it means "don't narrow by one", which reads differently.
+    var noneLabel: String = "None"
     @Binding var selection: PaymentSource?
 
     var body: some View {
         Picker(label, selection: $selection) {
             if allowsNone {
-                Text("None").tag(PaymentSource?.none)
+                Text(noneLabel).tag(PaymentSource?.none)
             }
             if !accounts.isEmpty {
                 Section("Bank Accounts") {
