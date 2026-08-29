@@ -48,9 +48,12 @@ struct TransactionsView: View {
 
     var body: some View {
         NavigationStack {
-            Group {
+            // One List for both states, rather than swapping in a ScrollView when
+            // empty: the navigation bar binds its large-title behaviour to a single
+            // scroll view, and a branch that replaces it leaves the title collapsed.
+            List {
                 if filtered.isEmpty {
-                    ScrollView {
+                    Section {
                         EmptyStateView(
                             symbol: transactions.isEmpty ? "tray" : "line.3.horizontal.decrease.circle",
                             title: transactions.isEmpty ? "No transactions yet" : "Nothing matches",
@@ -58,62 +61,64 @@ struct TransactionsView: View {
                                 ? "Tap the + button to log your first one."
                                 : "Try clearing the search or filters."
                         )
-                        .padding(.top, 60)
+                        .padding(.top, 40)
+                        .frame(maxWidth: .infinity)
+                        .listRowBackground(Color.clear)
+                        .listRowSeparator(.hidden)
                     }
                 } else {
-                    List {
-                        Section {
-                            HStack {
-                                Text("\(filtered.count) transaction\(filtered.count == 1 ? "" : "s")")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                                Spacer()
-                                AmountText(amount: filteredTotal, font: .caption)
-                            }
-                            .listRowBackground(Color.clear)
-                        }
-
-                        ForEach(sections, id: \.date) { section in
-                            Section {
-                                ForEach(section.items) { transaction in
-                                    Button {
-                                        editingTransaction = transaction
-                                    } label: {
-                                        TransactionRow(transaction: transaction)
-                                    }
-                                    .buttonStyle(.plain)
-                                    .swipeActions(edge: .trailing) {
-                                        Button(role: .destructive) {
-                                            pendingDeletion = transaction
-                                        } label: {
-                                            Label("Delete", systemImage: "trash")
-                                        }
-                                    }
-                                }
-                            } header: {
-                                HStack {
-                                    Text(Formatters.relativeDayLabel(for: section.date))
-                                    Spacer()
-                                    Text(Formatters.signedCurrency(
-                                        section.items.reduce(Decimal.zero) { $0 + $1.signedAmount }
-                                    ))
-                                    .monospacedDigit()
-                                }
+                    Section {
+                        HStack {
+                            Text("\(filtered.count) transaction\(filtered.count == 1 ? "" : "s")")
                                 .font(.caption)
-                                .textCase(nil)
-                            }
+                                .foregroundStyle(.secondary)
+                            Spacer()
+                            AmountText(amount: filteredTotal, font: .caption)
                         }
-
-                        // Keeps the last row clear of the floating button.
-                        Color.clear
-                            .frame(height: 70)
-                            .listRowBackground(Color.clear)
-                            .listRowSeparator(.hidden)
+                        .listRowBackground(Color.clear)
                     }
-                    .listStyle(.insetGrouped)
+
+                    ForEach(sections, id: \.date) { section in
+                        Section {
+                            ForEach(section.items) { transaction in
+                                Button {
+                                    editingTransaction = transaction
+                                } label: {
+                                    TransactionRow(transaction: transaction)
+                                }
+                                .buttonStyle(.plain)
+                                .swipeActions(edge: .trailing) {
+                                    Button(role: .destructive) {
+                                        pendingDeletion = transaction
+                                    } label: {
+                                        Label("Delete", systemImage: "trash")
+                                    }
+                                }
+                            }
+                        } header: {
+                            HStack {
+                                Text(Formatters.relativeDayLabel(for: section.date))
+                                Spacer()
+                                Text(Formatters.signedCurrency(
+                                    section.items.reduce(Decimal.zero) { $0 + $1.signedAmount }
+                                ))
+                                .monospacedDigit()
+                            }
+                            .font(.caption)
+                            .textCase(nil)
+                        }
+                    }
+
+                    // Keeps the last row clear of the floating button.
+                    Color.clear
+                        .frame(height: 70)
+                        .listRowBackground(Color.clear)
+                        .listRowSeparator(.hidden)
                 }
             }
+            .listStyle(.insetGrouped)
             .navigationTitle("Transactions")
+            .navigationBarTitleDisplayMode(.large)
             // `.always` keeps the field pinned under the title instead of hiding it
             // until the list is pulled down.
             .searchable(
