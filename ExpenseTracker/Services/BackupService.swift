@@ -4,7 +4,10 @@ import SwiftData
 /// Full-fidelity local backup: every account, category, rule and transaction in
 /// one JSON file, with relationships stored as IDs so restore can rebuild them.
 struct BackupPayload: Codable {
-    static let currentFormatVersion = 1
+    /// 2 dropped the required `emoji` field from categories in favour of
+    /// `symbolName`. Older builds require `emoji`, so the bump makes them
+    /// report "made by a newer version" instead of failing to decode.
+    static let currentFormatVersion = 2
 
     var formatVersion: Int = BackupPayload.currentFormatVersion
     var exportedAt: Date = Date()
@@ -31,7 +34,10 @@ struct BackupPayload: Codable {
     struct CategoryDTO: Codable {
         var id: UUID
         var name: String
-        var emoji: String
+        /// Absent in backups written before categories used SF Symbols.
+        var symbolName: String?
+        /// Only present in those older backups; used to infer a symbol.
+        var emoji: String?
         var colorHex: String
         var type: String
         var isArchived: Bool
@@ -125,7 +131,8 @@ enum BackupService {
             .init(
                 id: category.id,
                 name: category.name,
-                emoji: category.emoji,
+                symbolName: category.symbol,
+                emoji: nil,
                 colorHex: category.colorHex,
                 type: category.typeRaw,
                 isArchived: category.isArchived,
@@ -236,7 +243,8 @@ enum BackupService {
             let category = Category(
                 id: dto.id,
                 name: dto.name,
-                emoji: dto.emoji,
+                symbol: dto.symbolName,
+                emoji: dto.emoji ?? "",
                 colorHex: dto.colorHex,
                 type: TransactionType(rawValue: dto.type) ?? .expense,
                 sortIndex: dto.sortIndex,

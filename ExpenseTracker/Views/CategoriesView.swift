@@ -42,7 +42,7 @@ struct CategoriesView: View {
                         editingCategory = category
                     } label: {
                         HStack(spacing: 12) {
-                            CategoryBadge(emoji: category.emoji, colorHex: category.colorHex)
+                            CategoryBadge(symbolName: category.symbol, colorHex: category.colorHex)
                             VStack(alignment: .leading, spacing: 2) {
                                 Text(category.name).foregroundStyle(.primary)
                                 Text("\(category.transactions?.count ?? 0) transactions")
@@ -161,7 +161,7 @@ struct CategoryEditorView: View {
     @Query(sort: \Category.sortIndex) private var categories: [Category]
 
     @State private var name = ""
-    @State private var emoji = "🏷️"
+    @State private var symbolName = CategoryIcon.expenseFallback
     @State private var colorHex = Theme.paletteHexes[0]
     @State private var type: TransactionType = .expense
 
@@ -176,7 +176,7 @@ struct CategoryEditorView: View {
             Form {
                 Section {
                     HStack(spacing: 14) {
-                        CategoryBadge(emoji: emoji, colorHex: colorHex, size: 52)
+                        CategoryBadge(symbolName: symbolName, colorHex: colorHex, size: 52)
                         TextField("Name", text: $name)
                             .font(.title3)
                     }
@@ -192,9 +192,7 @@ struct CategoryEditorView: View {
                 }
 
                 Section("Icon") {
-                    EmojiPickerRow(emoji: $emoji)
-                    TextField("Or type any emoji", text: $emoji)
-                        .font(.body)
+                    CategoryIconPicker(symbolName: $symbolName, colorHex: colorHex)
                 }
 
                 Section("Colour") {
@@ -216,38 +214,35 @@ struct CategoryEditorView: View {
     }
 
     /// Fills the form from the category being edited, or picks sensible
-    /// defaults (next palette colour, type-appropriate glyph) for a new one.
+    /// defaults (next palette colour, type-appropriate icon) for a new one.
     private func load() {
         guard let category else {
             type = presetType
             colorHex = Theme.paletteHexes[categories.count % Theme.paletteHexes.count]
-            emoji = presetType == .expense ? "🏷️" : "💰"
+            symbolName = CategoryIcon.fallback(for: presetType)
             return
         }
         name = category.name
-        emoji = category.emoji
+        symbolName = category.symbol
         colorHex = category.colorHex
         type = category.type
     }
 
     /// Creates or updates the category and dismisses.
-    /// A new category is appended after the last one of its type, and the
-    /// glyph is clipped to a single rendered emoji.
+    /// A new category is appended after the last one of its type.
     private func save() {
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
-        // Keep a single visible glyph even if the field holds a longer string.
-        let glyph = emoji.isEmpty ? "🏷️" : String(emoji.prefix(2))
 
         if let category {
             category.name = trimmed
-            category.emoji = glyph
+            category.symbolName = symbolName
             category.colorHex = colorHex
             category.type = type
             try? context.save()
         } else {
             let created = Category(
                 name: trimmed,
-                emoji: glyph,
+                symbol: symbolName,
                 colorHex: colorHex,
                 type: type,
                 sortIndex: (categories.filter { $0.type == type }.map(\.sortIndex).max() ?? -1) + 1

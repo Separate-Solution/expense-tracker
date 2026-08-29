@@ -6,7 +6,7 @@ import SwiftData
 struct UpcomingItem: Identifiable {
     let id: String
     let title: String
-    let emoji: String
+    let symbolName: String
     let colorHex: String
     let amount: Decimal
     let type: TransactionType
@@ -191,7 +191,8 @@ struct HomeView: View {
                 UpcomingItem(
                     id: transaction.id.uuidString,
                     title: transaction.title,
-                    emoji: transaction.category?.emoji ?? "🏷️",
+                    symbolName: transaction.category?.symbol
+                        ?? CategoryIcon.fallback(for: transaction.type),
                     colorHex: transaction.category?.colorHex ?? Theme.paletteHexes[8],
                     amount: transaction.amount,
                     type: transaction.type,
@@ -206,7 +207,7 @@ struct HomeView: View {
                 UpcomingItem(
                     id: "rule-\(rule.id.uuidString)",
                     title: rule.title,
-                    emoji: rule.category?.emoji ?? "🔁",
+                    symbolName: rule.category?.symbol ?? CategoryIcon.recurringFallback,
                     colorHex: rule.category?.colorHex ?? Theme.paletteHexes[5],
                     amount: rule.amount,
                     type: rule.type,
@@ -225,7 +226,7 @@ struct HomeView: View {
             VStack(spacing: 0) {
                 ForEach(Array(upcoming.enumerated()), id: \.element.id) { index, item in
                     HStack(spacing: 12) {
-                        CategoryBadge(emoji: item.emoji, colorHex: item.colorHex, size: 34)
+                        CategoryBadge(symbolName: item.symbolName, colorHex: item.colorHex, size: 34)
                         VStack(alignment: .leading, spacing: 2) {
                             Text(item.title).font(.subheadline).lineLimit(1)
                             HStack(spacing: 4) {
@@ -254,7 +255,7 @@ struct HomeView: View {
     private struct CategoryTotal: Identifiable {
         let id: String
         let name: String
-        let emoji: String
+        let symbolName: String
         let colorHex: String
         let total: Decimal
         let share: Double
@@ -266,14 +267,14 @@ struct HomeView: View {
         let total = expenses.reduce(Decimal.zero) { $0 + $1.amount }
         guard total > 0 else { return [] }
 
-        var buckets: [String: (name: String, emoji: String, colorHex: String, sum: Decimal)] = [:]
+        var buckets: [String: (name: String, symbolName: String, colorHex: String, sum: Decimal)] = [:]
         for transaction in expenses {
             let key = transaction.category?.id.uuidString ?? "uncategorized"
             let name = transaction.category?.name ?? "Uncategorized"
-            let emoji = transaction.category?.emoji ?? "🏷️"
+            let symbolName = transaction.category?.symbol ?? CategoryIcon.expenseFallback
             let colorHex = transaction.category?.colorHex ?? Theme.paletteHexes[8]
             let existing = buckets[key]?.sum ?? .zero
-            buckets[key] = (name, emoji, colorHex, existing + transaction.amount)
+            buckets[key] = (name, symbolName, colorHex, existing + transaction.amount)
         }
 
         return buckets
@@ -281,7 +282,7 @@ struct HomeView: View {
                 CategoryTotal(
                     id: key,
                     name: value.name,
-                    emoji: value.emoji,
+                    symbolName: value.symbolName,
                     colorHex: value.colorHex,
                     total: value.sum,
                     share: (value.sum / total).doubleValue
@@ -301,7 +302,10 @@ struct HomeView: View {
                     ForEach(topCategories) { entry in
                         VStack(spacing: 5) {
                             HStack(spacing: 10) {
-                                Text(entry.emoji).font(.callout)
+                                Image(systemName: entry.symbolName)
+                                    .font(.callout)
+                                    .foregroundStyle(Color(hex: entry.colorHex))
+                                    .frame(width: 22)
                                 Text(entry.name).font(.subheadline).lineLimit(1)
                                 Spacer()
                                 Text(Formatters.currencyMagnitude(entry.total))

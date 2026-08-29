@@ -369,7 +369,8 @@ enum CSVService {
                 } else {
                     let created = Category(
                         name: categoryName,
-                        emoji: categoryEmoji(
+                        symbol: categorySymbol(
+                            name: categoryName,
                             explicit: field(.emoji),
                             iconName: field(.icon),
                             type: type
@@ -456,33 +457,31 @@ enum CSVService {
         return cleaned.count == 6 ? cleaned : nil
     }
 
-    /// Cashew stores an icon name rather than an emoji; map the common ones so
-    /// imported categories don't all come in as a generic tag.
-    private static let iconEmoji: [String: String] = [
-        "groceries": "🛒", "cutlery": "🍔", "food": "🍔", "restaurant": "🍽️",
-        "coffee": "☕️", "tram": "🚕", "car": "🚗", "fuel": "⛽️", "bus": "🚌",
-        "bills": "💡", "home": "🏠", "rent": "🏠", "subscription": "🔁",
-        "coin": "💰", "money": "💰", "salary": "💼", "work": "💼",
-        "loan": "🤝", "charts": "📊", "popcorn": "🎬", "movie": "🎬",
-        "shopping": "🛍️", "gift": "🎁", "health": "💊", "medical": "💊",
-        "travel": "✈️", "flight": "✈️", "education": "📚", "book": "📚",
-        "phone": "📱", "internet": "🌐", "pet": "🐶", "baby": "👶",
-        "fitness": "🏋️", "beauty": "🧴", "investment": "📈", "bank": "🏦"
-    ]
-
-    /// Picks a category glyph: an explicit emoji if the file has one, else a
-    /// known icon name, else a default for the type.
+    /// Picks a category icon: the symbol matching an explicit emoji column if
+    /// the file has one, else a known third-party icon name, else one inferred
+    /// from the category's own name.
     /// - Parameters:
+    ///   - name: The category name from the file.
     ///   - explicit: Value of the emoji column.
     ///   - iconName: Value of the icon-name column.
-    ///   - type: Used to choose the fallback glyph.
-    /// - Returns: A single emoji.
-    static func categoryEmoji(explicit: String, iconName: String, type: TransactionType) -> String {
+    ///   - type: Used to choose the fallback symbol.
+    /// - Returns: An SF Symbol name.
+    static func categorySymbol(
+        name: String,
+        explicit: String,
+        iconName: String,
+        type: TransactionType
+    ) -> String {
+        // No emoji-presentation check first: text-presentation glyphs like "✈"
+        // are mapped too, and an unrecognised value already comes back nil.
         let trimmed = explicit.trimmingCharacters(in: .whitespacesAndNewlines)
-        if let first = trimmed.first, first.isEmoji { return String(first) }
-        let key = iconName.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        if let mapped = iconEmoji[key] { return mapped }
-        return type == .expense ? "🏷️" : "💰"
+        if let mapped = CategoryIcon.symbol(forEmoji: trimmed) { return mapped }
+        if let first = trimmed.first,
+           let mapped = CategoryIcon.symbol(forEmoji: String(first)) {
+            return mapped
+        }
+        if let mapped = CategoryIcon.symbol(forImportedIconName: iconName) { return mapped }
+        return CategoryIcon.inferred(name: name, type: type)
     }
 
     /// Maps bank-statement wording (debit/credit, in/out) to a transaction type.

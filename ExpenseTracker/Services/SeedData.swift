@@ -7,35 +7,35 @@ enum SeedData {
 
     struct CategorySeed {
         let name: String
-        let emoji: String
+        let symbol: String
         let colorIndex: Int
     }
 
     static let expenseCategories: [CategorySeed] = [
-        .init(name: "Groceries", emoji: "🛒", colorIndex: 9),
-        .init(name: "Dining", emoji: "🍔", colorIndex: 11),
-        .init(name: "Transport", emoji: "🚕", colorIndex: 0),
-        .init(name: "Shopping", emoji: "🛍️", colorIndex: 6),
-        .init(name: "Bills & Utilities", emoji: "💡", colorIndex: 3),
-        .init(name: "Rent", emoji: "🏠", colorIndex: 8),
-        .init(name: "Health", emoji: "💊", colorIndex: 1),
-        .init(name: "Entertainment", emoji: "🎬", colorIndex: 4),
-        .init(name: "Subscriptions", emoji: "🔁", colorIndex: 5),
-        .init(name: "Travel", emoji: "✈️", colorIndex: 10),
-        .init(name: "Education", emoji: "📚", colorIndex: 2),
-        .init(name: "Personal Care", emoji: "🧴", colorIndex: 6),
-        .init(name: "Gifts", emoji: "🎁", colorIndex: 4),
-        .init(name: "Other", emoji: "📦", colorIndex: 8)
+        .init(name: "Groceries", symbol: "cart.fill", colorIndex: 9),
+        .init(name: "Dining", symbol: "fork.knife", colorIndex: 11),
+        .init(name: "Transport", symbol: "car.fill", colorIndex: 0),
+        .init(name: "Shopping", symbol: "bag.fill", colorIndex: 6),
+        .init(name: "Bills & Utilities", symbol: "lightbulb.fill", colorIndex: 3),
+        .init(name: "Rent", symbol: "house.fill", colorIndex: 8),
+        .init(name: "Health", symbol: "cross.case.fill", colorIndex: 1),
+        .init(name: "Entertainment", symbol: "film.fill", colorIndex: 4),
+        .init(name: "Subscriptions", symbol: "arrow.triangle.2.circlepath", colorIndex: 5),
+        .init(name: "Travel", symbol: "airplane", colorIndex: 10),
+        .init(name: "Education", symbol: "graduationcap.fill", colorIndex: 2),
+        .init(name: "Personal Care", symbol: "sparkles", colorIndex: 6),
+        .init(name: "Gifts", symbol: "gift.fill", colorIndex: 4),
+        .init(name: "Other", symbol: "shippingbox.fill", colorIndex: 8)
     ]
 
     static let incomeCategories: [CategorySeed] = [
-        .init(name: "Salary", emoji: "💼", colorIndex: 9),
-        .init(name: "Freelance", emoji: "🧑‍💻", colorIndex: 0),
-        .init(name: "Business", emoji: "🏢", colorIndex: 5),
-        .init(name: "Investments", emoji: "📈", colorIndex: 2),
-        .init(name: "Interest", emoji: "🏦", colorIndex: 3),
-        .init(name: "Refunds", emoji: "↩️", colorIndex: 8),
-        .init(name: "Other", emoji: "💰", colorIndex: 4)
+        .init(name: "Salary", symbol: "briefcase.fill", colorIndex: 9),
+        .init(name: "Freelance", symbol: "laptopcomputer", colorIndex: 0),
+        .init(name: "Business", symbol: "building.2.fill", colorIndex: 5),
+        .init(name: "Investments", symbol: "chart.line.uptrend.xyaxis", colorIndex: 2),
+        .init(name: "Interest", symbol: "building.columns.fill", colorIndex: 3),
+        .init(name: "Refunds", symbol: "arrow.uturn.left.circle.fill", colorIndex: 8),
+        .init(name: "Other", symbol: "banknote.fill", colorIndex: 4)
     ]
 
     /// Inserts defaults only when the store is genuinely empty, so a restore
@@ -45,6 +45,8 @@ enum SeedData {
         if categoryCount == 0 {
             insertDefaultCategories(in: context)
         }
+
+        backfillCategoryIcons(in: context)
 
         let accountCount = (try? context.fetchCount(FetchDescriptor<Account>())) ?? 0
         if accountCount == 0 {
@@ -66,7 +68,7 @@ enum SeedData {
         for (index, seed) in expenseCategories.enumerated() {
             context.insert(Category(
                 name: seed.name,
-                emoji: seed.emoji,
+                symbol: seed.symbol,
                 colorHex: Theme.paletteHexes[seed.colorIndex % Theme.paletteHexes.count],
                 type: .expense,
                 sortIndex: index
@@ -75,11 +77,29 @@ enum SeedData {
         for (index, seed) in incomeCategories.enumerated() {
             context.insert(Category(
                 name: seed.name,
-                emoji: seed.emoji,
+                symbol: seed.symbol,
                 colorHex: Theme.paletteHexes[seed.colorIndex % Theme.paletteHexes.count],
                 type: .income,
                 sortIndex: index
             ))
+        }
+    }
+
+    /// Gives an SF Symbol to categories saved before icons stopped being
+    /// emoji, deriving it from the old glyph and falling back to the name.
+    /// A no-op once every category has one.
+    /// - Parameter context: The context to update; the caller saves.
+    static func backfillCategoryIcons(in context: ModelContext) {
+        let stale = FetchDescriptor<Category>(
+            predicate: #Predicate { $0.symbolName.isEmpty }
+        )
+        guard let categories = try? context.fetch(stale), !categories.isEmpty else { return }
+        for category in categories {
+            category.symbolName = CategoryIcon.inferred(
+                name: category.name,
+                emoji: category.emoji,
+                type: category.type
+            )
         }
     }
 }

@@ -68,7 +68,7 @@ struct TransactionEditorView: View {
                     Picker("Category", selection: $categoryID) {
                         Text("Uncategorized").tag(UUID?.none)
                         ForEach(categories) { category in
-                            Text("\(category.emoji)  \(category.name)").tag(Optional(category.id))
+                            Label(category.name, systemImage: category.symbol).tag(Optional(category.id))
                         }
                     }
 
