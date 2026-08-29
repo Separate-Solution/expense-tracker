@@ -11,11 +11,12 @@ struct TransactionsView: View {
 
     @Query(sort: \Transaction.date, order: .reverse) private var transactions: [Transaction]
     @Query(sort: \Account.sortIndex) private var accounts: [Account]
+    @Query(sort: \CreditCard.sortIndex) private var cards: [CreditCard]
     @Query(sort: \Category.sortIndex) private var categories: [Category]
 
     @State private var searchText = ""
     @State private var typeFilter: TransactionType?
-    @State private var accountFilter: UUID?
+    @State private var sourceFilter: PaymentSource?
     @State private var categoryFilter: UUID?
     @State private var editingTransaction: Transaction?
     @State private var pendingDeletion: Transaction?
@@ -23,13 +24,13 @@ struct TransactionsView: View {
     @State private var isConfirmingBulkDeletion = false
 
     private var hasActiveFilter: Bool {
-        typeFilter != nil || accountFilter != nil || categoryFilter != nil
+        typeFilter != nil || sourceFilter != nil || categoryFilter != nil
     }
 
     private var filtered: [Transaction] {
         transactions.filter { transaction in
             if let typeFilter, transaction.type != typeFilter { return false }
-            if let accountFilter, transaction.account?.id != accountFilter { return false }
+            if let sourceFilter, transaction.paymentSource != sourceFilter { return false }
             if let categoryFilter, transaction.category?.id != categoryFilter { return false }
             guard !searchText.isEmpty else { return true }
             let needle = searchText.lowercased()
@@ -37,6 +38,7 @@ struct TransactionsView: View {
                 || transaction.note.lowercased().contains(needle)
                 || (transaction.category?.name.lowercased().contains(needle) ?? false)
                 || (transaction.account?.name.lowercased().contains(needle) ?? false)
+                || (transaction.creditCard?.name.lowercased().contains(needle) ?? false)
         }
     }
 
@@ -55,8 +57,26 @@ struct TransactionsView: View {
             .sorted { $0.date > $1.date }
     }
 
+    /// Card bill payments are shown in the list but left out of every total:
+    /// they settle purchases that are already listed as spending, so counting
+    /// them again would double up.
     private var filteredTotal: Decimal {
-        filtered.reduce(Decimal.zero) { $0 + $1.signedAmount }
+        Self.total(of: filtered)
+    }
+
+    /// How many rows on screen are excluded from the totals, so the figure can
+    /// say why it doesn't match the rows above it.
+    private var excludedPaymentCount: Int {
+        filtered.filter { !$0.countsTowardsTotals }.count
+    }
+
+    /// Nets a set of rows, ignoring anything that doesn't count as money in or out.
+    /// - Parameter transactions: The rows to total.
+    /// - Returns: The net of the countable ones.
+    private static func total(of transactions: [Transaction]) -> Decimal {
+        transactions
+            .filter(\.countsTowardsTotals)
+            .reduce(Decimal.zero) { $0 + $1.signedAmount }
     }
 
     /// The transactions the bulk actions apply to — always the selected rows
@@ -104,12 +124,19 @@ struct TransactionsView: View {
                     }
                 } else {
                     Section {
-                        HStack {
-                            Text("\(filtered.count) transaction\(filtered.count == 1 ? "" : "s")")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                            Spacer()
-                            AmountText(amount: filteredTotal, font: .caption)
+                        VStack(alignment: .leading, spacing: 3) {
+                            HStack {
+                                Text("\(filtered.count) transaction\(filtered.count == 1 ? "" : "s")")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                Spacer()
+                                AmountText(amount: filteredTotal, font: .caption)
+                            }
+                            if excludedPaymentCount > 0 {
+                                Text("Totals leave out \(excludedPaymentCount) card payment\(excludedPaymentCount == 1 ? "" : "s") \u{2014} the spending they settle is already listed.")
+                                    .font(.caption2)
+                                    .foregroundStyle(.secondary)
+                            }
                         }
                         .listRowBackground(Color.clear)
                     }
@@ -123,10 +150,8 @@ struct TransactionsView: View {
                             HStack {
                                 Text(Formatters.relativeDayLabel(for: section.date))
                                 Spacer()
-                                Text(Formatters.signedCurrency(
-                                    section.items.reduce(Decimal.zero) { $0 + $1.signedAmount }
-                                ))
-                                .monospacedDigit()
+                                Text(Formatters.signedCurrency(Self.total(of: section.items)))
+                                    .monospacedDigit()
                             }
                             .font(.caption)
                             .textCase(nil)
@@ -300,7 +325,7 @@ struct TransactionsView: View {
     /// Everything the filtered list depends on, so a change can prune the
     /// selection without recomputing the whole list to compare it.
     private var filterSignature: String {
-        [typeFilter?.rawValue ?? "", accountFilter?.uuidString ?? "",
+        [typeFilter?.rawValue ?? "", sourceFilter?.id ?? "",
          categoryFilter?.uuidString ?? "", searchText].joined(separator: "|")
     }
 
@@ -313,11 +338,13 @@ struct TransactionsView: View {
                 }
             }
 
-            Picker("Account", selection: $accountFilter) {
-                Text("All accounts").tag(UUID?.none)
-                ForEach(accounts) { account in
-                    Text(account.name).tag(Optional(account.id))
-                }
+            Menu("Paid with") {
+                PaymentSourcePicker(
+                    label: "Paid with",
+                    accounts: accounts,
+                    cards: cards,
+                    selection: $sourceFilter
+                )
             }
 
             Picker("Category", selection: $categoryFilter) {
@@ -331,7 +358,7 @@ struct TransactionsView: View {
                 Divider()
                 Button("Clear filters", systemImage: "xmark.circle") {
                     typeFilter = nil
-                    accountFilter = nil
+                    sourceFilter = nil
                     categoryFilter = nil
                 }
             }

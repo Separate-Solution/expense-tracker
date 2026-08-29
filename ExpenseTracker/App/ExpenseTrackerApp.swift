@@ -8,10 +8,12 @@ struct ExpenseTrackerApp: App {
 
     let container: ModelContainer
 
-    /// Builds the SwiftData container for the four persisted models.
+    /// Builds the SwiftData container for the five persisted models.
     /// A store that cannot be opened is treated as fatal at launch.
     init() {
-        let schema = Schema([Account.self, Category.self, Transaction.self, RecurringRule.self])
+        let schema = Schema([
+            Account.self, CreditCard.self, Category.self, Transaction.self, RecurringRule.self
+        ])
         let configuration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: false)
         do {
             container = try ModelContainer(for: schema, configurations: [configuration])

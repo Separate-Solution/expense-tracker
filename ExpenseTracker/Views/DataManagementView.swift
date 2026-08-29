@@ -62,9 +62,10 @@ struct DataManagementView: View {
             } header: {
                 Text("CSV")
             } footer: {
-                Text("Columns: Date, Time, Title, Type, Amount, Currency, Account, Account Type, Category, Note, ID. "
+                Text("Columns: Date, Time, Title, Type, Amount, Currency, Account, Account Type, Credit Card, Category, Note, ID. "
                      + "Importing any other file works too — you'll get to check which column feeds which field before anything is saved. "
-                     + "Accounts and categories in the file are created if they don't exist, and rows whose ID already exists are skipped.")
+                     + "Accounts, credit cards and categories in the file are created if they don't exist, and rows whose ID already exists are skipped. "
+                     + "A row naming both an account and a credit card is read as a bill payment.")
             }
 
             Section {
@@ -96,7 +97,7 @@ struct DataManagementView: View {
             } header: {
                 Text("Backup")
             } footer: {
-                Text("A backup contains everything — accounts, categories, recurring rules and transactions. Restoring replaces all current data.")
+                Text("A backup contains everything — accounts, credit cards, categories, recurring rules and transactions. Restoring replaces all current data.")
             }
 
             Section {
@@ -116,7 +117,7 @@ struct DataManagementView: View {
                     Text("This can't be undone. Make a backup first if you're not sure.")
                 }
             } footer: {
-                Text("Removes every account, category, rule and transaction, then restores the default categories.")
+                Text("Removes every account, credit card, category, rule and transaction, then restores the default categories.")
             }
         }
         .navigationTitle("Data")
@@ -239,6 +240,10 @@ struct DataManagementView: View {
             let unique = Array(Set(summary.createdAccounts)).sorted()
             lines.append("Created accounts: \(unique.joined(separator: ", ")).")
         }
+        if !summary.createdCreditCards.isEmpty {
+            let unique = Array(Set(summary.createdCreditCards)).sorted()
+            lines.append("Created credit cards: \(unique.joined(separator: ", ")). Set their limits in Accounts.")
+        }
         if !summary.createdCategories.isEmpty {
             let unique = Array(Set(summary.createdCategories)).sorted()
             lines.append("Created categories: \(unique.joined(separator: ", ")).")
@@ -290,7 +295,8 @@ struct DataManagementView: View {
             showStatus(
                 "Restored",
                 "\(summary.transactions) transactions, \(summary.accounts) accounts, "
-                + "\(summary.categories) categories and \(summary.recurringRules) recurring rules are back."
+                + "\(summary.creditCards) credit cards, \(summary.categories) categories "
+                + "and \(summary.recurringRules) recurring rules are back."
             )
         } catch {
             showStatus("Restore failed", error.localizedDescription)

@@ -6,12 +6,23 @@ struct TransactionRow: View {
     /// Time of day is worth showing where rows are already grouped by day.
     var showsTime: Bool = false
 
+    /// A bill payment borrows the card’s look, since it has no category.
+    private var badgeSymbol: String {
+        transaction.isCardPayment
+            ? "creditcard"
+            : (transaction.category?.symbol ?? CategoryIcon.fallback(for: transaction.type))
+    }
+
+    private var badgeColorHex: String {
+        if transaction.isCardPayment {
+            return transaction.creditCard?.colorHex ?? Theme.paletteHexes[8]
+        }
+        return transaction.category?.colorHex ?? Theme.paletteHexes[8]
+    }
+
     var body: some View {
         HStack(spacing: 12) {
-            CategoryBadge(
-                symbolName: transaction.category?.symbol ?? CategoryIcon.fallback(for: transaction.type),
-                colorHex: transaction.category?.colorHex ?? Theme.paletteHexes[8]
-            )
+            CategoryBadge(symbolName: badgeSymbol, colorHex: badgeColorHex)
 
             VStack(alignment: .leading, spacing: 3) {
                 Text(transaction.title)
@@ -20,10 +31,14 @@ struct TransactionRow: View {
                     .lineLimit(1)
 
                 HStack(spacing: 5) {
-                    Text(transaction.category?.name ?? "Uncategorized")
-                    if let account = transaction.account {
+                    // A bill payment has no category; naming the card it
+                    // settles is what actually tells you what the row is.
+                    Text(transaction.isCardPayment
+                         ? "Card payment"
+                         : (transaction.category?.name ?? "Uncategorized"))
+                    if let sourceName = transaction.sourceName {
                         Text("·")
-                        Text(account.name)
+                        Text(sourceName)
                     }
                     if showsDate {
                         Text("·")
@@ -37,6 +52,10 @@ struct TransactionRow: View {
                         Image(systemName: "repeat")
                             .font(.caption2)
                     }
+                    if transaction.isCardPayment {
+                        Image(systemName: "arrow.left.arrow.right")
+                            .font(.caption2)
+                    }
                 }
                 .font(.caption)
                 .foregroundStyle(.secondary)
@@ -46,7 +65,12 @@ struct TransactionRow: View {
             Spacer(minLength: 8)
 
             VStack(alignment: .trailing, spacing: 3) {
-                AmountText(amount: transaction.amount, type: transaction.type, font: .callout)
+                AmountText(
+                    amount: transaction.amount,
+                    type: transaction.type,
+                    font: .callout,
+                    isNeutral: transaction.isCardPayment
+                )
                 if transaction.isScheduled {
                     Text("Upcoming")
                         .font(.caption2)

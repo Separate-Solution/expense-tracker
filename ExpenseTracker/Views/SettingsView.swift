@@ -11,9 +11,30 @@ struct SettingsView: View {
 
     @Query(filter: #Predicate<Account> { !$0.isArchived }, sort: \Account.sortIndex)
     private var accounts: [Account]
+    @Query(filter: #Predicate<CreditCard> { !$0.isArchived }, sort: \CreditCard.sortIndex)
+    private var cards: [CreditCard]
     @Query private var transactions: [Transaction]
     @Query private var categories: [Category]
     @Query private var rules: [RecurringRule]
+
+    /// Rewrites a default saved before credit cards existed — a bare UUID —
+    /// into the tagged form the picker's rows carry, so an upgraded install
+    /// shows its choice instead of an empty selection. A default pointing at
+    /// something since deleted is cleared, leaving the valid fallback selected.
+    private func normaliseDefaultSource() {
+        // An empty query on the first pass would wrongly look like deletion.
+        guard !accounts.isEmpty || !cards.isEmpty else { return }
+        guard let decoded = PaymentSourceResolver.decode(defaultAccountID) else {
+            if !defaultAccountID.isEmpty { defaultAccountID = "" }
+            return
+        }
+        guard PaymentSourceResolver.name(decoded, accounts: accounts, cards: cards) != nil else {
+            defaultAccountID = ""
+            return
+        }
+        let canonical = PaymentSourceResolver.encode(decoded)
+        if canonical != defaultAccountID { defaultAccountID = canonical }
+    }
 
     private var appVersion: String {
         let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0"
@@ -64,13 +85,23 @@ struct SettingsView: View {
 
                     Picker(selection: $defaultAccountID) {
                         Text("Most recently used").tag("")
-                        ForEach(accounts) { account in
-                            Text(account.name).tag(account.id.uuidString)
+                        Section("Bank Accounts") {
+                            ForEach(accounts) { account in
+                                Text(account.name)
+                                    .tag(PaymentSourceResolver.encode(.account(account.id)))
+                            }
+                        }
+                        Section("Credit Cards") {
+                            ForEach(cards) { card in
+                                Text(card.name)
+                                    .tag(PaymentSourceResolver.encode(.creditCard(card.id)))
+                            }
                         }
                     } label: {
-                        Label("Default account", systemImage: "wallet.pass")
+                        Label("Default payment source", systemImage: "wallet.pass")
                     }
                     .pickerStyle(.menu)
+                    .onAppear(perform: normaliseDefaultSource)
                 } header: {
                     Text("Defaults")
                 } footer: {
@@ -87,7 +118,8 @@ struct SettingsView: View {
 
                 Section {
                     LabeledContent("Transactions", value: "\(transactions.count)")
-                    LabeledContent("Accounts", value: "\(accounts.count)")
+                    LabeledContent("Bank accounts", value: "\(accounts.count)")
+                    LabeledContent("Credit cards", value: "\(cards.count)")
                     LabeledContent("Version", value: appVersion)
                 } header: {
                     Text("About")

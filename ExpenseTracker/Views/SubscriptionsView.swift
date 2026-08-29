@@ -170,6 +170,8 @@ struct RecurringRuleEditorView: View {
     @Query(sort: \Category.sortIndex) private var allCategories: [Category]
     @Query(filter: #Predicate<Account> { !$0.isArchived }, sort: \Account.sortIndex)
     private var accounts: [Account]
+    @Query(filter: #Predicate<CreditCard> { !$0.isArchived }, sort: \CreditCard.sortIndex)
+    private var cards: [CreditCard]
 
     @State private var title = ""
     @State private var amount: Decimal = .zero
@@ -180,7 +182,7 @@ struct RecurringRuleEditorView: View {
     @State private var hasEndDate = false
     @State private var endDate = Date().addingMonths(12)
     @State private var categoryID: UUID?
-    @State private var accountID: UUID?
+    @State private var source: PaymentSource?
     @State private var note = ""
     @State private var backfillPastOccurrences = true
     @State private var isShowingAmountPad = false
@@ -250,12 +252,7 @@ struct RecurringRuleEditorView: View {
                             Label(category.name, systemImage: category.symbol).tag(Optional(category.id))
                         }
                     }
-                    Picker("Account", selection: $accountID) {
-                        Text("None").tag(UUID?.none)
-                        ForEach(accounts) { account in
-                            Text(account.name).tag(Optional(account.id))
-                        }
-                    }
+                    PaymentSourcePicker(accounts: accounts, cards: cards, selection: $source)
                     TextField("Note", text: $note, axis: .vertical)
                         .lineLimit(2...4)
                 }
@@ -289,10 +286,10 @@ struct RecurringRuleEditorView: View {
     }
 
     /// Fills the form from the rule being edited, or defaults a new rule to
-    /// the first account with a one-year end date ready to enable.
+    /// the first bank account with a one-year end date ready to enable.
     private func load() {
         guard let rule else {
-            accountID = accounts.first?.id
+            source = accounts.first.map { .account($0.id) }
             return
         }
         title = rule.title
@@ -304,7 +301,7 @@ struct RecurringRuleEditorView: View {
         hasEndDate = rule.endDate != nil
         endDate = rule.endDate ?? Date().addingMonths(12)
         categoryID = rule.category?.id
-        accountID = rule.account?.id
+        source = rule.paymentSource
         note = rule.note
     }
 
@@ -314,7 +311,8 @@ struct RecurringRuleEditorView: View {
     private func save() {
         let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
         let category = allCategories.first { $0.id == categoryID }
-        let account = accounts.first { $0.id == accountID }
+        let account = PaymentSourceResolver.account(source, in: accounts)
+        let card = PaymentSourceResolver.card(source, in: cards)
 
         if let rule {
             rule.title = trimmed
@@ -326,6 +324,7 @@ struct RecurringRuleEditorView: View {
             rule.endDate = hasEndDate ? endDate.endOfDay : nil
             rule.category = category
             rule.account = account
+            rule.creditCard = card
             rule.note = note
             RecurrenceEngine.applyEdits(of: rule, in: context)
         } else {
@@ -339,6 +338,7 @@ struct RecurringRuleEditorView: View {
                 endDate: hasEndDate ? endDate : nil,
                 note: note,
                 account: account,
+                creditCard: card,
                 category: category
             )
             context.insert(created)

@@ -21,6 +21,8 @@ struct HomeView: View {
     @Query(sort: \Transaction.date, order: .reverse) private var transactions: [Transaction]
     @Query(filter: #Predicate<Account> { !$0.isArchived }, sort: \Account.sortIndex)
     private var accounts: [Account]
+    @Query(filter: #Predicate<CreditCard> { !$0.isArchived }, sort: \CreditCard.sortIndex)
+    private var cards: [CreditCard]
     @Query private var rules: [RecurringRule]
 
     @State private var monthAnchor = Date().startOfMonth
@@ -32,6 +34,9 @@ struct HomeView: View {
                 LazyVStack(alignment: .leading, spacing: 18) {
                     monthSwitcher
                     summaryCard
+                    if !cards.isEmpty {
+                        CreditCardDueSection(cards: cards, accounts: accounts)
+                    }
                     if !accounts.isEmpty { accountsStrip }
                     if !upcoming.isEmpty { upcomingSection }
                     topCategoriesSection
@@ -60,12 +65,36 @@ struct HomeView: View {
         transactions.filter { monthRange.contains($0.date) }
     }
 
+    /// The month's rows that count as real money in or out. Card bill payments
+    /// are left out: they settle purchases that were already counted as spending
+    /// when they were made, so including them would double up.
+    private var monthSpendable: [Transaction] {
+        monthTransactions.filter(\.countsTowardsTotals)
+    }
+
     private var monthIncome: Decimal {
-        monthTransactions.filter { $0.type == .income }.reduce(.zero) { $0 + $1.amount }
+        monthSpendable.filter { $0.type == .income }.reduce(.zero) { $0 + $1.amount }
     }
 
     private var monthExpense: Decimal {
-        monthTransactions.filter { $0.type == .expense }.reduce(.zero) { $0 + $1.amount }
+        monthSpendable.filter { $0.type == .expense }.reduce(.zero) { $0 + $1.amount }
+    }
+
+    /// What you are actually worth right now: everything in your accounts and
+    /// cash, less everything owed on cards. Unlike the figures beside it this
+    /// is not scoped to the month being browsed — it is today’s position.
+    private var netWorth: Decimal {
+        let assets = accounts.reduce(Decimal.zero) { $0 + $1.currentBalance }
+        let debts = cards.reduce(Decimal.zero) { $0 + $1.outstanding }
+        return assets - debts
+    }
+
+    /// Names the scope of the month figures, since the net worth above them
+    /// does not move with the month switcher.
+    private var monthScopeLabel: String {
+        Calendar.current.isDate(monthAnchor, equalTo: Date(), toGranularity: .month)
+            ? "This month"
+            : monthAnchor.formatted(Formatters.monthTitle)
     }
 
     private var monthSwitcher: some View {
@@ -103,26 +132,41 @@ struct HomeView: View {
     private var summaryCard: some View {
         VStack(spacing: 14) {
             VStack(spacing: 4) {
-                Text("Net this month")
+                Text("Net worth")
                     .font(.caption)
                     .foregroundStyle(.secondary)
-                AmountText(
-                    amount: monthIncome - monthExpense,
-                    font: .system(size: 34, design: .rounded),
-                    weight: .bold
-                )
+                Text(Formatters.balance(netWorth))
+                    .font(.system(size: 34, design: .rounded).weight(.bold))
+                    .monospacedDigit()
+                    .foregroundStyle(netWorth < 0 ? Theme.expense : .primary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.6)
+                Text(netWorthCaption)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
             }
 
             Divider()
 
-            HStack(spacing: 0) {
-                summaryColumn(title: "Income", amount: monthIncome, tint: Theme.income)
-                Divider().frame(height: 34)
-                summaryColumn(title: "Spent", amount: monthExpense, tint: Theme.expense)
+            VStack(spacing: 8) {
+                Text(monthScopeLabel)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                HStack(spacing: 0) {
+                    summaryColumn(title: "Income", amount: monthIncome, tint: Theme.income)
+                    Divider().frame(height: 34)
+                    summaryColumn(title: "Spent", amount: monthExpense, tint: Theme.expense)
+                }
             }
         }
         .frame(maxWidth: .infinity)
         .cardBackground()
+    }
+
+    private var netWorthCaption: String {
+        cards.isEmpty
+            ? "Across your accounts and cash"
+            : "Accounts and cash, less what you owe on cards"
     }
 
     /// One labelled figure in the month summary card.
@@ -150,7 +194,7 @@ struct HomeView: View {
 
     private var accountsStrip: some View {
         VStack(alignment: .leading, spacing: 8) {
-            sectionHeader("Accounts")
+            sectionHeader("Bank Accounts")
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 10) {
                     ForEach(accounts) { account in
@@ -262,7 +306,7 @@ struct HomeView: View {
     }
 
     private var topCategories: [CategoryTotal] {
-        let expenses = monthTransactions.filter { $0.type == .expense }
+        let expenses = monthSpendable.filter { $0.type == .expense }
         guard !expenses.isEmpty else { return [] }
         let total = expenses.reduce(Decimal.zero) { $0 + $1.amount }
         guard total > 0 else { return [] }

@@ -47,6 +47,7 @@ enum SeedData {
         }
 
         backfillCategoryIcons(in: context)
+        migrateLegacyCreditAccounts(in: context)
 
         let accountCount = (try? context.fetchCount(FetchDescriptor<Account>())) ?? 0
         if accountCount == 0 {
@@ -82,6 +83,56 @@ enum SeedData {
                 type: .income,
                 sortIndex: index
             ))
+        }
+    }
+
+    /// Converts accounts saved with the retired `.credit` kind into real
+    /// `CreditCard` records, keeping their name, colour, note and full history.
+    ///
+    /// The card starts with no credit limit — the app never knew one — so the
+    /// cards list flags it until the user fills it in. Transactions are moved
+    /// across before the account is deleted, so its cascade rule cannot take
+    /// them with it. A no-op once no legacy account is left.
+    /// - Parameter context: The context to update; the caller saves.
+    static func migrateLegacyCreditAccounts(in context: ModelContext) {
+        let creditRaw = AccountKind.credit.rawValue
+        let descriptor = FetchDescriptor<Account>(
+            predicate: #Predicate { $0.kindRaw == creditRaw }
+        )
+        guard let legacy = try? context.fetch(descriptor), !legacy.isEmpty else { return }
+
+        let existingCards = (try? context.fetch(FetchDescriptor<CreditCard>())) ?? []
+        var nextSortIndex = (existingCards.map(\.sortIndex).max() ?? -1) + 1
+
+        for account in legacy {
+            let card = CreditCard(
+                id: account.id,
+                name: account.name,
+                creditLimit: .zero,
+                statementDay: 1,
+                dueDay: 20,
+                // A credit account held what you owed as a negative balance, so
+                // the sign flips: outstanding counts up as you spend.
+                openingOutstanding: -account.openingBalance,
+                colorHex: account.colorHex,
+                sortIndex: nextSortIndex,
+                note: account.note,
+                createdAt: account.createdAt
+            )
+            card.isArchived = account.isArchived
+            context.insert(card)
+            nextSortIndex += 1
+
+            for transaction in account.transactions ?? [] {
+                transaction.account = nil
+                transaction.creditCard = card
+            }
+            for rule in account.recurringRules ?? [] {
+                rule.account = nil
+                rule.creditCard = card
+            }
+
+            context.delete(account)
         }
     }
 

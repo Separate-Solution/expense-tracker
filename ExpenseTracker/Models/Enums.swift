@@ -35,6 +35,16 @@ enum AccountKind: String, Codable, CaseIterable, Identifiable {
 
     var id: String { rawValue }
 
+    /// The kinds offered when creating an account. `.credit` is deliberately
+    /// absent: credit cards are their own model and their own section now. The
+    /// case survives so older stores and backups still decode, and so the
+    /// launch migration has something to recognise.
+    static let selectableCases: [AccountKind] = [.bank, .cash]
+
+    /// True for the retired `.credit` kind, which the launch migration converts
+    /// into a `CreditCard`.
+    var isLegacyCreditKind: Bool { self == .credit }
+
     /// Full display name, used where there is room to spell it out.
     var title: String {
         switch self {
@@ -105,6 +115,50 @@ enum RecurrenceFrequency: String, Codable, CaseIterable, Identifiable {
         case .weekly: return .weekOfYear
         case .monthly: return .month
         case .yearly: return .year
+        }
+    }
+}
+
+/// What a transaction represents. A standard row is real spending or income; a
+/// card payment moves money from a bank account to a credit card and is left out
+/// of income and spending totals, because the purchases it settles were already
+/// counted when they were made.
+enum TransactionKind: String, Codable, CaseIterable, Identifiable {
+    case standard
+    case cardPayment
+
+    var id: String { rawValue }
+
+    /// Display name used on rows and pickers.
+    var title: String {
+        switch self {
+        case .standard: return "Transaction"
+        case .cardPayment: return "Card Payment"
+        }
+    }
+
+    /// SF Symbol marking the row as a transfer rather than spending.
+    var symbolName: String {
+        switch self {
+        case .standard: return "arrow.left.arrow.right"
+        case .cardPayment: return "arrow.left.arrow.right"
+        }
+    }
+
+    /// Whether this kind counts towards income and spending totals.
+    var countsTowardsTotals: Bool { self == .standard }
+}
+
+/// Where a transaction's money came from — a bank account or a credit card.
+/// Used by the pickers, which have to offer both in one list.
+enum PaymentSource: Hashable, Identifiable {
+    case account(UUID)
+    case creditCard(UUID)
+
+    var id: String {
+        switch self {
+        case .account(let id): return "account-\(id.uuidString)"
+        case .creditCard(let id): return "card-\(id.uuidString)"
         }
     }
 }

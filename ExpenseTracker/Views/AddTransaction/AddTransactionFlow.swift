@@ -15,6 +15,8 @@ struct AddTransactionFlow: View {
     @Query(sort: \Category.sortIndex) private var allCategories: [Category]
     @Query(filter: #Predicate<Account> { !$0.isArchived }, sort: \Account.sortIndex)
     private var accounts: [Account]
+    @Query(filter: #Predicate<CreditCard> { !$0.isArchived }, sort: \CreditCard.sortIndex)
+    private var cards: [CreditCard]
 
     @AppStorage(SettingsKey.defaultAccountID) private var defaultAccountID = ""
 
@@ -22,7 +24,7 @@ struct AddTransactionFlow: View {
     @State private var title = ""
     @State private var type: TransactionType = .expense
     @State private var selectedCategory: Category?
-    @State private var selectedAccount: Account?
+    @State private var source: PaymentSource?
     @State private var date = Date()
     @State private var note = ""
     @State private var engine = CalculatorEngine()
@@ -42,6 +44,14 @@ struct AddTransactionFlow: View {
 
     private var trimmedTitle: String {
         title.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private var selectedAccount: Account? {
+        PaymentSourceResolver.account(source, in: accounts)
+    }
+
+    private var selectedCard: CreditCard? {
+        PaymentSourceResolver.card(source, in: cards)
     }
 
     private var canSave: Bool {
@@ -191,7 +201,7 @@ struct AddTransactionFlow: View {
             .first(where: { $0.title.lowercased() == suggestion.lowercased() }) {
             type = match.type
             selectedCategory = match.category
-            if selectedAccount == nil { selectedAccount = match.account }
+            if source == nil { source = match.paymentSource }
         }
         isNameFocused = false
         step = selectedCategory == nil ? .category : .amount
@@ -351,9 +361,11 @@ struct AddTransactionFlow: View {
                 ) { isShowingDetails = true }
 
                 chip(
-                    systemImage: selectedAccount?.kind.symbolName ?? "wallet.pass",
-                    text: selectedAccount?.name ?? "No account",
-                    isActive: false
+                    systemImage: PaymentSourceResolver.symbolName(source, accounts: accounts, cards: cards),
+                    text: PaymentSourceResolver.name(source, accounts: accounts, cards: cards)
+                        ?? "No account",
+                    // A card charge is worth flagging: it is money borrowed, not spent.
+                    isActive: selectedCard != nil
                 ) { isShowingDetails = true }
 
                 chip(
@@ -416,17 +428,15 @@ struct AddTransactionFlow: View {
                     }
                 }
 
-                Section("Account") {
-                    Picker("Account", selection: Binding(
-                        get: { selectedAccount?.id },
-                        set: { newValue in
-                            selectedAccount = accounts.first { $0.id == newValue }
-                        }
-                    )) {
-                        Text("None").tag(UUID?.none)
-                        ForEach(accounts) { account in
-                            Text(account.name).tag(Optional(account.id))
-                        }
+                Section {
+                    PaymentSourcePicker(accounts: accounts, cards: cards, selection: $source)
+                } header: {
+                    Text("Paid with")
+                } footer: {
+                    if let card = selectedCard {
+                        Text("Charged to \(card.name). It will be added to the card\u{2019}s "
+                             + "balance and billed on the statement closing "
+                             + "\(Formatters.ordinalDay(card.statementDay)).")
                     }
                 }
 
@@ -474,16 +484,16 @@ struct AddTransactionFlow: View {
 
     // MARK: - Persistence
 
-    /// Preselects the account: the one saved in Settings when it still exists,
-    /// otherwise the first in the list. Leaves an existing choice alone.
+    /// Preselects where the money comes from: the source saved in Settings when
+    /// it still exists, otherwise the first bank account. Leaves an existing
+    /// choice alone.
     private func setUpDefaults() {
-        guard selectedAccount == nil else { return }
-        if let stored = UUID(uuidString: defaultAccountID),
-           let match = accounts.first(where: { $0.id == stored }) {
-            selectedAccount = match
-        } else {
-            selectedAccount = accounts.first
-        }
+        guard source == nil else { return }
+        source = PaymentSourceResolver.preferred(
+            storedID: defaultAccountID,
+            accounts: accounts,
+            cards: cards
+        )
     }
 
     /// Steps one screen back through name → category → amount, dismissing the
@@ -525,6 +535,7 @@ struct AddTransactionFlow: View {
                 endDate: hasEndDate ? endDate : nil,
                 note: note,
                 account: selectedAccount,
+                creditCard: selectedCard,
                 category: selectedCategory
             )
             context.insert(rule)
@@ -541,14 +552,15 @@ struct AddTransactionFlow: View {
                 date: date,
                 note: note,
                 account: selectedAccount,
+                creditCard: selectedCard,
                 category: selectedCategory
             )
             context.insert(transaction)
             try? context.save()
         }
 
-        if let account = selectedAccount {
-            defaultAccountID = account.id.uuidString
+        if source != nil {
+            defaultAccountID = PaymentSourceResolver.encode(source)
         }
         UINotificationFeedbackGenerator().notificationOccurred(.success)
         dismiss()
