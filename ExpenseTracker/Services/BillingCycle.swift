@@ -65,11 +65,17 @@ struct BillingCycle: Equatable {
         ) ?? startOfMonth
     }
 
-    /// The statement period that most recently closed on or before `date`.
+    /// The statement period that has most recently finished before `date`.
     ///
     /// A statement closing on the 5th covers the 6th of the previous month
-    /// through the 5th of this one. On the 5th itself the cycle has just closed,
-    /// so that day's statement is the one returned.
+    /// through the 5th of this one, and stays open for the whole of the 5th so
+    /// that day's own charges land on it. It only counts as closed once the day
+    /// is over: asked *on* the 5th this returns the previous month's statement,
+    /// and the 5th's own becomes the closed one at midnight.
+    ///
+    /// Treating it as closed at the start of the day instead would declare a
+    /// bill final while it was still collecting charges — a purchase that
+    /// evening would reopen a bill paid that morning.
     /// - Parameters:
     ///   - statementDay: Day of the month the statement closes.
     ///   - dueDay: Day of the month the bill is due.
