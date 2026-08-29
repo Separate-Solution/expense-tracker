@@ -256,7 +256,7 @@ struct AddTransactionFlow: View {
             step = .amount
         } label: {
             VStack(spacing: 6) {
-                CategoryBadge(emoji: category.emoji, colorHex: category.colorHex, size: 52)
+                CategoryBadge(symbolName: category.symbol, colorHex: category.colorHex, size: 52)
                     .overlay(
                         RoundedRectangle(cornerRadius: 52 * 0.3, style: .continuous)
                             .strokeBorder(Color.accentColor,
@@ -316,7 +316,7 @@ struct AddTransactionFlow: View {
                 step = .category
             } label: {
                 CategoryBadge(
-                    emoji: selectedCategory?.emoji ?? "🏷️",
+                    symbolName: selectedCategory?.symbol ?? CategoryIcon.expenseFallback,
                     colorHex: selectedCategory?.colorHex ?? Theme.paletteHexes[8],
                     size: 42
                 )

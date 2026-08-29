@@ -115,7 +115,7 @@ struct SubscriptionsView: View {
         } label: {
             HStack(spacing: 12) {
                 CategoryBadge(
-                    emoji: rule.category?.emoji ?? "🔁",
+                    symbolName: rule.category?.symbol ?? CategoryIcon.recurringFallback,
                     colorHex: rule.category?.colorHex ?? Theme.paletteHexes[5]
                 )
                 VStack(alignment: .leading, spacing: 2) {
@@ -247,7 +247,7 @@ struct RecurringRuleEditorView: View {
                     Picker("Category", selection: $categoryID) {
                         Text("Uncategorized").tag(UUID?.none)
                         ForEach(categories) { category in
-                            Text("\(category.emoji)  \(category.name)").tag(Optional(category.id))
+                            Label(category.name, systemImage: category.symbol).tag(Optional(category.id))
                         }
                     }
                     Picker("Account", selection: $accountID) {

@@ -7,7 +7,7 @@ struct TransactionRow: View {
     var body: some View {
         HStack(spacing: 12) {
             CategoryBadge(
-                emoji: transaction.category?.emoji ?? "🏷️",
+                symbolName: transaction.category?.symbol ?? CategoryIcon.expenseFallback,
                 colorHex: transaction.category?.colorHex ?? Theme.paletteHexes[8]
             )
 

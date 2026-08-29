@@ -1,8 +1,8 @@
 import SwiftUI
 
-/// The rounded emoji tile used for categories everywhere in the app.
+/// The rounded symbol tile used for categories everywhere in the app.
 struct CategoryBadge: View {
-    let emoji: String
+    let symbolName: String
     let colorHex: String
     var size: CGFloat = 38
 
@@ -11,8 +11,9 @@ struct CategoryBadge: View {
             .fill(Color(hex: colorHex).opacity(0.22))
             .frame(width: size, height: size)
             .overlay(
-                Text(emoji)
-                    .font(.system(size: size * 0.48))
+                Image(systemName: symbolName)
+                    .font(.system(size: size * 0.45, weight: .medium))
+                    .foregroundStyle(Color(hex: colorHex))
             )
     }
 }

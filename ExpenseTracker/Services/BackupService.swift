@@ -31,7 +31,10 @@ struct BackupPayload: Codable {
     struct CategoryDTO: Codable {
         var id: UUID
         var name: String
-        var emoji: String
+        /// Absent in backups written before categories used SF Symbols.
+        var symbolName: String?
+        /// Only present in those older backups; used to infer a symbol.
+        var emoji: String?
         var colorHex: String
         var type: String
         var isArchived: Bool
@@ -125,7 +128,8 @@ enum BackupService {
             .init(
                 id: category.id,
                 name: category.name,
-                emoji: category.emoji,
+                symbolName: category.symbol,
+                emoji: nil,
                 colorHex: category.colorHex,
                 type: category.typeRaw,
                 isArchived: category.isArchived,
@@ -236,7 +240,8 @@ enum BackupService {
             let category = Category(
                 id: dto.id,
                 name: dto.name,
-                emoji: dto.emoji,
+                symbol: dto.symbolName,
+                emoji: dto.emoji ?? "",
                 colorHex: dto.colorHex,
                 type: TransactionType(rawValue: dto.type) ?? .expense,
                 sortIndex: dto.sortIndex,
