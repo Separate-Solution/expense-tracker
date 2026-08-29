@@ -203,6 +203,11 @@ struct CSVColumnMappingView: View {
                     }
                 }
                 .padding(.vertical, 2)
+                // Without this the separator starts after the info icon on rows
+                // that show a note, leaving it short of the rows that don't.
+                .alignmentGuide(.listRowSeparatorLeading) { dimensions in
+                    dimensions[.leading]
+                }
             }
         } header: {
             Text("Columns")
