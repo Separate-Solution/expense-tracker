@@ -114,7 +114,13 @@ struct TransactionsView: View {
                 }
             }
             .navigationTitle("Transactions")
-            .searchable(text: $searchText, prompt: "Search transactions")
+            // `.always` keeps the field pinned under the title instead of hiding it
+            // until the list is pulled down.
+            .searchable(
+                text: $searchText,
+                placement: .navigationBarDrawer(displayMode: .always),
+                prompt: "Search transactions"
+            )
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     filterMenu
