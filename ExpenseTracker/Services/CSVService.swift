@@ -28,19 +28,20 @@ enum CSVError: LocalizedError {
 
 /// A transaction field that can be read from a CSV column.
 enum CSVField: String, CaseIterable, Identifiable {
-    case date, amount, type, title, category, account, accountKind, note, id
+    case date, time, amount, type, title, category, account, accountKind, note, id
     case income, color, icon, emoji
 
     var id: String { rawValue }
 
     /// Fields offered on the mapping screen, in the order they're shown.
     static let assignable: [CSVField] = [
-        .date, .amount, .type, .title, .category, .account, .accountKind, .note, .id
+        .date, .time, .amount, .type, .title, .category, .account, .accountKind, .note, .id
     ]
 
     var label: String {
         switch self {
         case .date: return "Date"
+        case .time: return "Time"
         case .amount: return "Amount"
         case .type: return "Type"
         case .title: return "Title"
@@ -63,6 +64,7 @@ enum CSVField: String, CaseIterable, Identifiable {
     var unassignedNote: String {
         switch self {
         case .date: return "Required. Nothing can be imported without it."
+        case .time: return "Transactions come in at the start of the day, unless the date column carries a time."
         case .amount: return "Required. Nothing can be imported without it."
         case .type: return "Falls back to the sign of the amount — negative becomes an expense."
         case .title: return "Falls back to the category name."
@@ -80,6 +82,7 @@ enum CSVField: String, CaseIterable, Identifiable {
     var aliases: [String] {
         switch self {
         case .date: return ["date", "transactiondate", "day"]
+        case .time: return ["time", "transactiontime", "timeofday", "clock"]
         case .amount: return ["amount", "value", "sum"]
         case .type: return ["type", "transactiontype", "kind", "direction", "drcr", "crdr"]
         case .title: return ["title", "name", "description", "notetitle", "payee", "merchant", "narration", "particulars"]
@@ -167,7 +170,7 @@ struct CSVImportPlan: Identifiable {
 enum CSVService {
 
     static let exportHeader = [
-        "Date", "Title", "Type", "Amount", "Currency",
+        "Date", "Time", "Title", "Type", "Amount", "Currency",
         "Account", "Account Type", "Category", "Note", "ID"
     ]
 
@@ -182,6 +185,7 @@ enum CSVService {
         for transaction in sorted {
             let fields = [
                 isoDateFormatter.string(from: transaction.date),
+                isoTimeFormatter.string(from: transaction.date),
                 transaction.title,
                 transaction.type.title,
                 NSDecimalNumber(decimal: transaction.amount.roundedToCurrency)
@@ -309,10 +313,14 @@ enum CSVService {
                 return row[index].trimmingCharacters(in: .whitespacesAndNewlines)
             }
 
-            guard let date = parseDate(field(.date), using: mapping.datePattern) else {
+            guard let parsedDate = parseDate(field(.date), using: mapping.datePattern) else {
                 summary.failures.append("Line \(lineNumber): couldn't read the date “\(field(.date))”.")
                 continue
             }
+            // A separate time column wins over any time the date column carried;
+            // an empty or unreadable one leaves the date's own time alone rather
+            // than failing the row.
+            let date = applyingTimeOfDay(field(.time), to: parsedDate)
             guard let signedAmount = parseAmount(field(.amount)) else {
                 summary.failures.append("Line \(lineNumber): couldn't read the amount “\(field(.amount))”.")
                 continue
@@ -545,6 +553,35 @@ enum CSVService {
         return ISO8601DateFormatter().date(from: trimmed)
     }
 
+    /// Reads a time of day written on its own, in 24-hour or 12-hour form —
+    /// "18:04", "18:04:22", "6:04 PM". Case is normalised first so a lowercase
+    /// "pm" reads under the POSIX locale.
+    /// - Parameter text: The raw column value.
+    /// - Returns: Hour, minute and second, or nil when there is nothing to read.
+    static func parseTime(_ text: String) -> DateComponents? {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+        guard !trimmed.isEmpty else { return nil }
+        for pattern in timePatterns {
+            guard let parsed = formatter(for: pattern).date(from: trimmed) else { continue }
+            return Calendar.current.dateComponents([.hour, .minute, .second], from: parsed)
+        }
+        return nil
+    }
+
+    /// Moves `date` to the time of day written in `text`, keeping the day it
+    /// already has. An empty or unreadable time leaves the date untouched.
+    /// - Parameters:
+    ///   - text: The raw time column value.
+    ///   - date: The date parsed from the date column.
+    /// - Returns: The combined date, or `date` when there is no time to apply.
+    static func applyingTimeOfDay(_ text: String, to date: Date) -> Date {
+        guard let time = parseTime(text),
+              let hour = time.hour, let minute = time.minute else { return date }
+        return Calendar.current.date(
+            bySettingHour: hour, minute: minute, second: time.second ?? 0, of: date
+        ) ?? date
+    }
+
     /// Guesses an account kind from its name when the file does not say —
     /// "wallet" reads as cash, "visa" as credit, everything else as bank.
     /// - Parameter name: The account name from the file.
@@ -567,6 +604,14 @@ enum CSVService {
         return formatter
     }()
 
+    static let isoTimeFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = .current
+        formatter.dateFormat = "HH:mm:ss"
+        return formatter
+    }()
+
     /// Patterns tried in order when no format has been chosen, most specific
     /// first. `dd/MM/yyyy` deliberately precedes `MM/dd/yyyy`; when a file
     /// matches both, the mapping screen asks instead of guessing.
@@ -580,9 +625,17 @@ enum CSVService {
         "dd MMM yyyy", "MMM dd, yyyy", "dd-MMM-yyyy"
     ]
 
+    /// Patterns tried against a standalone time column. The 12-hour ones come
+    /// first: `DateFormatter` matches a prefix, so "HH:mm" would read "6:04 PM"
+    /// as 06:04 and quietly drop the afternoon.
+    static let timePatterns = [
+        "h:mm:ss a", "h:mm a", "h a",
+        "HH:mm:ss.SSS", "HH:mm:ss", "HH:mm"
+    ]
+
     private static let formatterCache: [String: DateFormatter] = {
         var cache: [String: DateFormatter] = [:]
-        for pattern in datePatterns { cache[pattern] = makeDateFormatter(pattern) }
+        for pattern in datePatterns + timePatterns { cache[pattern] = makeDateFormatter(pattern) }
         return cache
     }()
 
