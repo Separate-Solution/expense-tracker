@@ -428,10 +428,11 @@ struct AddTransactionFlow: View {
                     }
                 }
 
+                // No header: the picker's own row is already labelled "Paid with",
+                // and the sibling sections all pair a header with a differently
+                // named row rather than repeating themselves.
                 Section {
                     PaymentSourcePicker(accounts: accounts, cards: cards, selection: $source)
-                } header: {
-                    Text("Paid with")
                 } footer: {
                     if let card = selectedCard {
                         Text("Charged to \(card.name). It will be added to the card\u{2019}s "
