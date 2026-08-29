@@ -51,7 +51,16 @@ struct TransactionsView: View {
             // One List for both states, rather than swapping in a ScrollView when
             // empty: the navigation bar binds its large-title behaviour to a single
             // scroll view, and a branch that replaces it leaves the title collapsed.
+            // The List also has to be the stack's direct child — wrapping it in a
+            // VStack to pin the search box stops the title collapsing on scroll.
             List {
+                Section {
+                    SearchField(text: $searchText, prompt: "Search transactions")
+                        .listRowBackground(Color.clear)
+                        .listRowSeparator(.hidden)
+                        .listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 4, trailing: 16))
+                }
+
                 if filtered.isEmpty {
                     Section {
                         EmptyStateView(
@@ -117,15 +126,13 @@ struct TransactionsView: View {
                 }
             }
             .listStyle(.insetGrouped)
+            // The custom search box doesn't get `.searchable`'s built-in
+            // dismiss-on-scroll. `.immediately` rather than `.interactively`:
+            // the latter only tracks a downward drag toward the keyboard, so
+            // scrolling up through results would leave it covering them.
+            .scrollDismissesKeyboard(.immediately)
             .navigationTitle("Transactions")
             .navigationBarTitleDisplayMode(.large)
-            // `.always` keeps the field pinned under the title instead of hiding it
-            // until the list is pulled down.
-            .searchable(
-                text: $searchText,
-                placement: .navigationBarDrawer(displayMode: .always),
-                prompt: "Search transactions"
-            )
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     filterMenu
