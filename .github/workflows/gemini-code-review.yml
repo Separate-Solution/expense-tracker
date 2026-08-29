@@ -1,0 +1,21 @@
+name: Gemini Code Review
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: sshnaidm/gemini-code-review-action@v2
+        with:
+          gemini-key: ${{ secrets.GEMINI_CODE_REVIEW }}
+          prompt: |
+            Review this diff with focus on:
+            - Security issues (injection, auth flaws, unsafe deserialization, secrets)
+            - Bugs and edge cases
+            - Code quality / maintainability
