@@ -17,6 +17,25 @@ struct SettingsView: View {
     @Query private var categories: [Category]
     @Query private var rules: [RecurringRule]
 
+    /// Rewrites a default saved before credit cards existed — a bare UUID —
+    /// into the tagged form the picker's rows carry, so an upgraded install
+    /// shows its choice instead of an empty selection. A default pointing at
+    /// something since deleted is cleared, leaving the valid fallback selected.
+    private func normaliseDefaultSource() {
+        // An empty query on the first pass would wrongly look like deletion.
+        guard !accounts.isEmpty || !cards.isEmpty else { return }
+        guard let decoded = PaymentSourceResolver.decode(defaultAccountID) else {
+            if !defaultAccountID.isEmpty { defaultAccountID = "" }
+            return
+        }
+        guard PaymentSourceResolver.name(decoded, accounts: accounts, cards: cards) != nil else {
+            defaultAccountID = ""
+            return
+        }
+        let canonical = PaymentSourceResolver.encode(decoded)
+        if canonical != defaultAccountID { defaultAccountID = canonical }
+    }
+
     private var appVersion: String {
         let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0"
         let build = Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "1"
@@ -82,6 +101,7 @@ struct SettingsView: View {
                         Label("Default payment source", systemImage: "wallet.pass")
                     }
                     .pickerStyle(.menu)
+                    .onAppear(perform: normaliseDefaultSource)
                 } header: {
                     Text("Defaults")
                 } footer: {

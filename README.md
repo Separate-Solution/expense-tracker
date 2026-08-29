@@ -102,7 +102,9 @@ The header says how many rows were left out whenever any are.
   re-importing an export is safe, and unparseable rows are reported by line number
   rather than failing the whole file. A `Credit Card` column charges the row to
   that card, creating it with no limit if it is new; a row naming both an account
-  and a card is read as a bill payment, which is how an export round-trips. Handles `1,234.56`, `₹1,234`, `(45.00)` and
+  and a card is read as a bill payment, which is how an export round-trips. A row
+  from an older export, whose `Account Type` is `credit` and which has no
+  `Credit Card` column, comes in as a card rather than a bank account. Handles `1,234.56`, `₹1,234`, `(45.00)` and
   a leading `-`; a negative amount means an expense when there's no `Type` column.
 - *Backup / restore* — one JSON file with accounts, credit cards, categories,
   recurring rules and transactions, relationships included. Backups written by

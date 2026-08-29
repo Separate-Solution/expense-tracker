@@ -354,7 +354,18 @@ enum CSVService {
             }
 
             let accountName = field(.account)
-            let cardName = field(.creditCard)
+            let explicitCardName = field(.creditCard)
+            let declaredKind = AccountKind(rawValue: field(.accountKind).lowercased())
+
+            // An export from before cards had their own model put the card's
+            // name in the Account column with Account Type "credit", and had no
+            // Credit Card column at all. Such a row is the card itself, not a
+            // bank account, so it comes in as one rather than being flattened
+            // to a bank account the migration would never look at again.
+            let isLegacyCreditRow = explicitCardName.isEmpty
+                && !accountName.isEmpty
+                && declaredKind?.isLegacyCreditKind == true
+            let cardName = isLegacyCreditRow ? accountName : explicitCardName
 
             var creditCard: CreditCard?
             if !cardName.isEmpty {
@@ -381,16 +392,17 @@ enum CSVService {
             // and the bank account it was paid from on the same line. A row
             // naming only a card was charged to it, so no account is involved.
             var account: Account? = creditCard == nil ? defaultAccount : nil
-            if !accountName.isEmpty {
+            if !accountName.isEmpty, !isLegacyCreditRow {
                 let key = accountName.lowercased()
                 if let existing = accountCache[key] {
                     account = existing
                 } else {
-                    let rawKind = AccountKind(rawValue: field(.accountKind).lowercased())
-                    // `credit` is retired; a file still carrying it becomes a bank account.
-                    let kind = (rawKind?.isLegacyCreditKind ?? true)
+                    // `credit` is retired, so a file still carrying it falls back
+                    // to a guess from the name; a legacy credit row never reaches
+                    // here, having already become a card above.
+                    let kind = (declaredKind?.isLegacyCreditKind ?? true)
                         ? inferAccountKind(from: accountName)
-                        : (rawKind ?? .bank)
+                        : (declaredKind ?? .bank)
                     let created = Account(
                         name: accountName,
                         kind: kind,

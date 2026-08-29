@@ -80,14 +80,19 @@ final class CreditCard {
         (transactions ?? []).reduce(openingOutstanding) { $0 + $1.creditCardImpact }
     }
 
-    /// `outstanding` counting only transactions dated today or earlier, so a
+    /// `outstanding` counting only transactions dated on or before `date`, so a
     /// future-dated charge doesn't eat into the credit you can spend today.
-    var clearedOutstanding: Decimal {
-        let cutoff = Date.now.endOfDay
+    /// - Parameter date: The day to settle the balance at; defaults to today.
+    /// - Returns: What is owed as of that day.
+    func outstanding(asOf date: Date) -> Decimal {
+        let cutoff = date.endOfDay
         return (transactions ?? [])
             .filter { $0.date <= cutoff }
             .reduce(openingOutstanding) { $0 + $1.creditCardImpact }
     }
+
+    /// `outstanding` as of today.
+    var clearedOutstanding: Decimal { outstanding(asOf: .now) }
 
     /// Credit still available to spend. Never reported below zero, and only
     /// meaningful once a limit has been set.
@@ -137,16 +142,25 @@ final class CreditCard {
     /// The bill still to pay: the last statement's balance less anything already
     /// paid towards it since the statement closed. Never negative — overpaying
     /// leaves a credit on `outstanding` rather than a negative amount due.
+    ///
+    /// A refund landing after the statement closed pays part of that statement
+    /// down without being a payment, so it counts too — otherwise the card would
+    /// be billed for money it no longer owes, and paying would push it into
+    /// credit. This holds however much has been spent in the new cycle since.
     /// - Parameter date: Reference point; defaults to now.
     /// - Returns: What is left to pay.
     func amountDue(asOf date: Date = .now) -> Decimal {
         let close = lastClosedCycle(asOf: date).end
-        // Capped at the reference date as well: a payment scheduled for next
-        // week must not settle this week's bill before it is actually made.
-        let paidSinceClose = (transactions ?? [])
-            .filter { $0.kind == .cardPayment && $0.date > close && $0.date <= date.endOfDay }
-            .reduce(Decimal.zero) { $0 + abs($1.amount) }
-        return max(.zero, (statementBalance(asOf: date) - paidSinceClose).roundedToCurrency)
+        // Anything landing after the statement that brings the balance down
+        // settles part of it — a bill payment, and equally a refund the merchant
+        // put through. New charges after the close belong to the next statement,
+        // so they are ignored rather than added to what is owed now. Both are
+        // capped at the reference date, so a payment scheduled for next week
+        // doesn't settle this week's bill before it is made.
+        let settledSinceClose = (transactions ?? [])
+            .filter { $0.date > close && $0.date <= date.endOfDay }
+            .reduce(Decimal.zero) { $0 + max(.zero, -$1.creditCardImpact) }
+        return max(.zero, (statementBalance(asOf: date) - settledSinceClose).roundedToCurrency)
     }
 
     /// Charges made since the last statement closed — what the *next* bill will
