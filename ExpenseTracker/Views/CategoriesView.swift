@@ -76,6 +76,7 @@ struct CategoriesView: View {
                     }
                 }
                 .onMove(perform: move)
+                .onDelete(perform: confirmDeletion)
             }
         }
         .navigationTitle("Categories")
@@ -91,6 +92,8 @@ struct CategoriesView: View {
         .sheet(item: $editingCategory) { category in
             CategoryEditorView(category: category, presetType: category.type)
         }
+        // Lives on the List, not the row: a row-level dialog is torn down along
+        // with the swipe state and never gets to present.
         .confirmationDialog(
             deletionPrompt,
             isPresented: Binding(
@@ -118,6 +121,13 @@ struct CategoriesView: View {
         return count == 0
             ? "Delete “\(pendingDeletion.name)”?"
             : "Delete “\(pendingDeletion.name)” used by \(count) transaction\(count == 1 ? "" : "s")?"
+    }
+
+    /// Edit mode deletes go through the same confirmation as the swipe action —
+    /// the rows shown are `visible`, not the full `categories` query.
+    private func confirmDeletion(at offsets: IndexSet) {
+        guard let index = offsets.first else { return }
+        pendingDeletion = visible[index]
     }
 
     private func move(from source: IndexSet, to destination: Int) {

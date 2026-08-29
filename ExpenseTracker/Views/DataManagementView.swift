@@ -8,9 +8,8 @@ struct DataManagementView: View {
 
     @Query private var transactions: [Transaction]
 
-    /// Only one file importer and one confirmation dialog may be attached to a
-    /// single view — stacking two of the same kind means only the last one works.
-    /// Both are driven by an enum instead.
+    /// Only one file importer may be attached to a single view — stacking two
+    /// means only the last one works, so both are driven by this enum.
     enum ImportKind: Identifiable {
         case csv, backup
         var id: Self { self }
@@ -23,14 +22,10 @@ struct DataManagementView: View {
         }
     }
 
-    enum PendingAction: Identifiable {
-        case restore, erase
-        var id: Self { self }
-    }
-
     @State private var exportedFile: ExportedFile?
     @State private var importKind: ImportKind?
-    @State private var pendingAction: PendingAction?
+    @State private var isConfirmingErase = false
+    @State private var isConfirmingRestore = false
     @State private var pendingRestore: BackupPayload?
     @State private var pendingCSV: CSVImportPlan?
     /// Set by the mapping sheet's Import button; the import itself runs in
@@ -84,6 +79,20 @@ struct DataManagementView: View {
                 } label: {
                     Label("Restore from backup", systemImage: "arrow.up.doc")
                 }
+                // Attached to the row itself so the dialog points at the button
+                // it belongs to rather than at the middle of the list.
+                .confirmationDialog(
+                    "Replace all data with this backup?",
+                    isPresented: $isConfirmingRestore,
+                    titleVisibility: .visible
+                ) {
+                    Button("Restore and replace", role: .destructive) { performRestore() }
+                    Button("Cancel", role: .cancel) { pendingRestore = nil }
+                } message: {
+                    if let pendingRestore {
+                        Text("The backup holds \(pendingRestore.transactions.count) transactions across \(pendingRestore.accounts.count) accounts, made on \(pendingRestore.exportedAt.formatted(Formatters.shortDate)). Everything currently in the app will be removed.")
+                    }
+                }
             } header: {
                 Text("Backup")
             } footer: {
@@ -92,9 +101,19 @@ struct DataManagementView: View {
 
             Section {
                 Button(role: .destructive) {
-                    pendingAction = .erase
+                    isConfirmingErase = true
                 } label: {
                     Label("Erase all data", systemImage: "trash")
+                }
+                .confirmationDialog(
+                    "Erase everything?",
+                    isPresented: $isConfirmingErase,
+                    titleVisibility: .visible
+                ) {
+                    Button("Erase all data", role: .destructive) { eraseAll() }
+                    Button("Cancel", role: .cancel) { }
+                } message: {
+                    Text("This can't be undone. Make a backup first if you're not sure.")
                 }
             } footer: {
                 Text("Removes every account, category, rule and transaction, then restores the default categories.")
@@ -128,30 +147,6 @@ struct DataManagementView: View {
             default: handleCSVImport(result)
             }
             importKind = nil
-        }
-        .confirmationDialog(
-            pendingAction == .erase ? "Erase everything?" : "Replace all data with this backup?",
-            isPresented: Binding(
-                get: { pendingAction != nil },
-                set: { if !$0 { pendingAction = nil } }
-            ),
-            titleVisibility: .visible
-        ) {
-            switch pendingAction {
-            case .erase:
-                Button("Erase all data", role: .destructive) { eraseAll() }
-            case .restore:
-                Button("Restore and replace", role: .destructive) { performRestore() }
-            case .none:
-                EmptyView()
-            }
-            Button("Cancel", role: .cancel) { pendingRestore = nil }
-        } message: {
-            if pendingAction == .erase {
-                Text("This can't be undone. Make a backup first if you're not sure.")
-            } else if let pendingRestore {
-                Text("The backup holds \(pendingRestore.transactions.count) transactions across \(pendingRestore.accounts.count) accounts, made on \(pendingRestore.exportedAt.formatted(Formatters.shortDate)). Everything currently in the app will be removed.")
-            }
         }
         .alert(statusTitle, isPresented: $isShowingStatus) {
             Button("OK", role: .cancel) { }
@@ -262,7 +257,7 @@ struct DataManagementView: View {
             do {
                 let data = try readSecurityScoped(url) { try Data(contentsOf: $0) }
                 pendingRestore = try BackupService.decode(data)
-                pendingAction = .restore
+                isConfirmingRestore = true
             } catch {
                 showStatus("Couldn't open backup", error.localizedDescription)
             }
