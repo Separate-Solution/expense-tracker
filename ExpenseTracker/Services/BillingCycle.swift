@@ -17,17 +17,26 @@ struct BillingCycle: Equatable {
         date >= start && date <= end
     }
 
-    /// Whole days from now until the bill is due; negative once it is overdue.
-    var daysUntilDue: Int {
+    /// Whole days from `date` until the bill is due; negative once it is overdue.
+    ///
+    /// Takes the reference date rather than reading the clock, so a cycle built
+    /// for some other day is measured against that day too.
+    /// - Parameter date: The day to count from; defaults to today.
+    /// - Returns: Days remaining, negative once overdue.
+    func daysUntilDue(asOf date: Date = .now) -> Int {
         Calendar.current.dateComponents(
             [.day],
-            from: Date.now.startOfDay,
+            from: date.startOfDay,
             to: dueDate.startOfDay
         ).day ?? 0
     }
 
-    /// True when the due date has passed.
-    var isOverdue: Bool { Date.now.startOfDay > dueDate.startOfDay }
+    /// Whether the due date has passed.
+    /// - Parameter date: The day to judge from; defaults to today.
+    /// - Returns: True once the bill is late.
+    func isOverdue(asOf date: Date = .now) -> Bool {
+        date.startOfDay > dueDate.startOfDay
+    }
 
     // MARK: - Construction
 

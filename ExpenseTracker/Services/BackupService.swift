@@ -365,18 +365,29 @@ enum BackupService {
             context.insert(transaction)
         }
 
+        // A version 1 or 2 backup can carry accounts saved under the retired
+        // `.credit` kind. Migrating here rather than waiting for the next launch
+        // keeps the restored store consistent with what the app just showed.
+        SeedData.migrateLegacyCreditAccounts(in: context)
+
         try context.save()
 
         if !payload.currencyCode.isEmpty {
             UserDefaults.standard.set(payload.currencyCode, forKey: SettingsKey.currencyCode)
         }
 
+        // Counted from the store rather than the file: migrating a legacy credit
+        // account turns it into a card, so the file's own tallies would report
+        // an account that is no longer there and miss the card that replaced it.
         return BackupSummary(
-            accounts: payload.accounts.count,
-            creditCards: (payload.creditCards ?? []).count,
-            categories: payload.categories.count,
-            recurringRules: payload.recurringRules.count,
-            transactions: payload.transactions.count
+            accounts: (try? context.fetchCount(FetchDescriptor<Account>())) ?? payload.accounts.count,
+            creditCards: (try? context.fetchCount(FetchDescriptor<CreditCard>()))
+                ?? (payload.creditCards ?? []).count,
+            categories: (try? context.fetchCount(FetchDescriptor<Category>())) ?? payload.categories.count,
+            recurringRules: (try? context.fetchCount(FetchDescriptor<RecurringRule>()))
+                ?? payload.recurringRules.count,
+            transactions: (try? context.fetchCount(FetchDescriptor<Transaction>()))
+                ?? payload.transactions.count
         )
     }
 

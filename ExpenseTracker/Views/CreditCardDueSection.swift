@@ -39,9 +39,12 @@ struct CreditCardDueSection: View {
     /// - Returns: The configured block.
     @ViewBuilder
     private func cardBlock(_ card: CreditCard) -> some View {
-        let cycle = card.lastClosedCycle()
-        let due = card.amountDue()
-        let unbilled = card.currentCycleSpend()
+        // One instant for the whole block, so a render that straddles midnight
+        // can't mix a cycle from one day with a countdown from the next.
+        let now = Date.now
+        let cycle = card.lastClosedCycle(asOf: now)
+        let due = card.amountDue(asOf: now)
+        let unbilled = card.currentCycleSpend(asOf: now)
 
         VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 12) {
@@ -49,9 +52,9 @@ struct CreditCardDueSection: View {
 
                 VStack(alignment: .leading, spacing: 2) {
                     Text(card.name).font(.subheadline).lineLimit(1)
-                    Text(dueCaption(cycle: cycle, amountDue: due))
+                    Text(dueCaption(cycle: cycle, amountDue: due, asOf: now))
                         .font(.caption)
-                        .foregroundStyle(captionTint(cycle: cycle, amountDue: due))
+                        .foregroundStyle(captionTint(cycle: cycle, amountDue: due, asOf: now))
                 }
 
                 Spacer(minLength: 8)
@@ -73,7 +76,7 @@ struct CreditCardDueSection: View {
 
             if unbilled > 0 {
                 Text("\(Formatters.currencyMagnitude(unbilled)) spent since the last statement, "
-                     + "billed on \(card.currentCycle().end.formatted(Formatters.shortDate)).")
+                     + "billed on \(card.currentCycle(asOf: now).end.formatted(Formatters.shortDate)).")
                     .font(.caption2)
                     .foregroundStyle(.secondary)
             }
@@ -103,12 +106,13 @@ struct CreditCardDueSection: View {
     /// - Parameters:
     ///   - cycle: The statement period the bill came from.
     ///   - amountDue: What is still owed on it.
+    ///   - date: The instant to measure the countdown from.
     /// - Returns: The caption text.
-    private func dueCaption(cycle: BillingCycle, amountDue: Decimal) -> String {
+    private func dueCaption(cycle: BillingCycle, amountDue: Decimal, asOf date: Date) -> String {
         guard amountDue > 0 else {
             return "Nothing due · next bill \(cycle.dueDate.addingMonths(1).formatted(Formatters.shortDate))"
         }
-        let days = cycle.daysUntilDue
+        let days = cycle.daysUntilDue(asOf: date)
         if days < 0 {
             let overdue = -days
             return "Overdue by \(overdue) day\(overdue == 1 ? "" : "s")"
@@ -122,10 +126,11 @@ struct CreditCardDueSection: View {
     /// - Parameters:
     ///   - cycle: The statement period the bill came from.
     ///   - amountDue: What is still owed on it.
+    ///   - date: The instant to measure the countdown from.
     /// - Returns: The colour for the caption.
-    private func captionTint(cycle: BillingCycle, amountDue: Decimal) -> Color {
+    private func captionTint(cycle: BillingCycle, amountDue: Decimal, asOf date: Date) -> Color {
         guard amountDue > 0 else { return .secondary }
-        return cycle.daysUntilDue <= 3 ? Theme.expense : .secondary
+        return cycle.daysUntilDue(asOf: date) <= 3 ? Theme.expense : .secondary
     }
 }
 

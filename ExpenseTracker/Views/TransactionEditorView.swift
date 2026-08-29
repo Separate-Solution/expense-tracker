@@ -49,17 +49,22 @@ struct TransactionEditorView: View {
                         }
                     }
 
-                    Picker("Type", selection: $type) {
-                        ForEach(TransactionType.allCases) { option in
-                            Text(option.title).tag(option)
+                    // A bill payment only ever moves money out of the account and
+                    // off the card. Letting its direction be switched to income
+                    // would credit the account while still clearing the debt.
+                    if !transaction.isCardPayment {
+                        Picker("Type", selection: $type) {
+                            ForEach(TransactionType.allCases) { option in
+                                Text(option.title).tag(option)
+                            }
                         }
-                    }
-                    .pickerStyle(.segmented)
-                    .onChange(of: type) { _, newValue in
-                        // Keep the category consistent with the new direction.
-                        if let categoryID,
-                           allCategories.first(where: { $0.id == categoryID })?.type != newValue {
-                            self.categoryID = nil
+                        .pickerStyle(.segmented)
+                        .onChange(of: type) { _, newValue in
+                            // Keep the category consistent with the new direction.
+                            if let categoryID,
+                               allCategories.first(where: { $0.id == categoryID })?.type != newValue {
+                                self.categoryID = nil
+                            }
                         }
                     }
                 }
@@ -163,7 +168,9 @@ struct TransactionEditorView: View {
     /// and dismisses. The title is trimmed and the amount rounded first.
     private func save() {
         transaction.title = title.trimmingCharacters(in: .whitespacesAndNewlines)
-        transaction.type = type
+        // Belt and braces alongside hiding the picker: a payment is an expense
+        // on the account it leaves, whatever state the form was left in.
+        transaction.type = transaction.isCardPayment ? .expense : type
         transaction.amount = amount.roundedToCurrency
         transaction.date = date
         transaction.note = note

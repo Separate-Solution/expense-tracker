@@ -141,8 +141,10 @@ final class CreditCard {
     /// - Returns: What is left to pay.
     func amountDue(asOf date: Date = .now) -> Decimal {
         let close = lastClosedCycle(asOf: date).end
+        // Capped at the reference date as well: a payment scheduled for next
+        // week must not settle this week's bill before it is actually made.
         let paidSinceClose = (transactions ?? [])
-            .filter { $0.kind == .cardPayment && $0.date > close }
+            .filter { $0.kind == .cardPayment && $0.date > close && $0.date <= date.endOfDay }
             .reduce(Decimal.zero) { $0 + abs($1.amount) }
         return max(.zero, (statementBalance(asOf: date) - paidSinceClose).roundedToCurrency)
     }
