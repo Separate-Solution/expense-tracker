@@ -25,6 +25,12 @@ A paid developer account extends that to a year.
 
 ## What's in it
 
+**Overview** — the headline figure is **net worth**: everything in your accounts
+and cash, less everything owed on your cards. It is today's position and does not
+move with the month switcher, so paying a card bill leaves it unchanged — the
+money shifts from one side to the other. Income and spending for the month being
+browsed sit underneath it, labelled with which month that is.
+
 **Bank accounts** — bank accounts and cash. Each has an opening balance, a colour
 and a running balance. Accounts can be archived (keeps history) or deleted
 (removes their transactions, with a confirmation that tells you how many).

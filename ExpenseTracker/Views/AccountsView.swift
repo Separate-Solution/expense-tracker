@@ -36,9 +36,12 @@ struct AccountsView: View {
                 if !activeAccounts.isEmpty || !activeCards.isEmpty {
                     Section {
                         HStack {
-                            Text("Net balance").font(.subheadline)
+                            Text("Net worth").font(.subheadline)
                             Spacer()
-                            AmountText(amount: netWorth, font: .headline)
+                            Text(Formatters.balance(netWorth))
+                                .font(.headline)
+                                .monospacedDigit()
+                                .foregroundStyle(netWorth < 0 ? Theme.expense : .primary)
                         }
                     } footer: {
                         if !activeCards.isEmpty {

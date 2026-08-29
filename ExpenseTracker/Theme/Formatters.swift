@@ -53,6 +53,16 @@ enum Formatters {
         return magnitude
     }
 
+    /// A balance: the magnitude, with a minus only when it is negative. Unlike
+    /// `signedCurrency` there is no "+" on positives — a plus reads as a
+    /// change, and a balance is a standing amount rather than a movement.
+    /// - Parameter value: The balance to format.
+    /// - Returns: The formatted balance.
+    static func balance(_ value: Decimal) -> String {
+        let magnitude = currencyMagnitude(value)
+        return value < 0 ? "\u{2212}" + magnitude : magnitude
+    }
+
     /// A day of the month as an ordinal — "1st", "22nd", "31st" — used for the
     /// statement and due days on a credit card.
     /// - Parameter day: Day of the month, 1...31.

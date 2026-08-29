@@ -80,6 +80,23 @@ struct HomeView: View {
         monthSpendable.filter { $0.type == .expense }.reduce(.zero) { $0 + $1.amount }
     }
 
+    /// What you are actually worth right now: everything in your accounts and
+    /// cash, less everything owed on cards. Unlike the figures beside it this
+    /// is not scoped to the month being browsed — it is today’s position.
+    private var netWorth: Decimal {
+        let assets = accounts.reduce(Decimal.zero) { $0 + $1.currentBalance }
+        let debts = cards.reduce(Decimal.zero) { $0 + $1.outstanding }
+        return assets - debts
+    }
+
+    /// Names the scope of the month figures, since the net worth above them
+    /// does not move with the month switcher.
+    private var monthScopeLabel: String {
+        Calendar.current.isDate(monthAnchor, equalTo: Date(), toGranularity: .month)
+            ? "This month"
+            : monthAnchor.formatted(Formatters.monthTitle)
+    }
+
     private var monthSwitcher: some View {
         HStack {
             Button {
@@ -115,26 +132,41 @@ struct HomeView: View {
     private var summaryCard: some View {
         VStack(spacing: 14) {
             VStack(spacing: 4) {
-                Text("Net this month")
+                Text("Net worth")
                     .font(.caption)
                     .foregroundStyle(.secondary)
-                AmountText(
-                    amount: monthIncome - monthExpense,
-                    font: .system(size: 34, design: .rounded),
-                    weight: .bold
-                )
+                Text(Formatters.balance(netWorth))
+                    .font(.system(size: 34, design: .rounded).weight(.bold))
+                    .monospacedDigit()
+                    .foregroundStyle(netWorth < 0 ? Theme.expense : .primary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.6)
+                Text(netWorthCaption)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
             }
 
             Divider()
 
-            HStack(spacing: 0) {
-                summaryColumn(title: "Income", amount: monthIncome, tint: Theme.income)
-                Divider().frame(height: 34)
-                summaryColumn(title: "Spent", amount: monthExpense, tint: Theme.expense)
+            VStack(spacing: 8) {
+                Text(monthScopeLabel)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                HStack(spacing: 0) {
+                    summaryColumn(title: "Income", amount: monthIncome, tint: Theme.income)
+                    Divider().frame(height: 34)
+                    summaryColumn(title: "Spent", amount: monthExpense, tint: Theme.expense)
+                }
             }
         }
         .frame(maxWidth: .infinity)
         .cardBackground()
+    }
+
+    private var netWorthCaption: String {
+        cards.isEmpty
+            ? "Across your accounts and cash"
+            : "Accounts and cash, less what you owe on cards"
     }
 
     /// One labelled figure in the month summary card.
