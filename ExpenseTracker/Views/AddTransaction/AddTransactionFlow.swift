@@ -179,6 +179,10 @@ struct AddTransactionFlow: View {
         return result
     }
 
+    /// Fills the form from a tapped recent name, copying the type, category
+    /// and account from the most recent transaction with that title, then
+    /// skipping straight to the amount when a category came with it.
+    /// - Parameter suggestion: The chip the user tapped.
     private func applySuggestion(_ suggestion: String) {
         title = suggestion
         var descriptor = FetchDescriptor<Transaction>(sortBy: [SortDescriptor(\.createdAt, order: .reverse)])
@@ -193,6 +197,7 @@ struct AddTransactionFlow: View {
         step = selectedCategory == nil ? .category : .amount
     }
 
+    /// Moves from the name step to the category step, ignoring a blank name.
     private func advanceFromName() {
         guard !trimmedTitle.isEmpty else { return }
         isNameFocused = false
@@ -242,6 +247,9 @@ struct AddTransactionFlow: View {
         allCategories.filter { $0.type == type && !$0.isArchived }
     }
 
+    /// One tile in the category grid, showing selection state.
+    /// - Parameter category: The category to render.
+    /// - Returns: The configured tile view.
     private func categoryTile(_ category: Category) -> some View {
         Button {
             selectedCategory = category
@@ -370,6 +378,13 @@ struct AddTransactionFlow: View {
             : "Every \(interval) \(frequency.unitLabel(interval: interval))"
     }
 
+    /// A small tappable pill used for the date, account and note shortcuts.
+    /// - Parameters:
+    ///   - systemImage: Leading SF Symbol.
+    ///   - text: Label text.
+    ///   - isActive: Whether to draw the chip as set rather than empty.
+    ///   - action: Run when tapped.
+    /// - Returns: The configured chip view.
     private func chip(systemImage: String, text: String, isActive: Bool, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             HStack(spacing: 5) {
@@ -453,6 +468,8 @@ struct AddTransactionFlow: View {
 
     // MARK: - Persistence
 
+    /// Preselects the account: the one saved in Settings when it still exists,
+    /// otherwise the first in the list. Leaves an existing choice alone.
     private func setUpDefaults() {
         guard selectedAccount == nil else { return }
         if let stored = UUID(uuidString: defaultAccountID),
@@ -463,6 +480,8 @@ struct AddTransactionFlow: View {
         }
     }
 
+    /// Steps one screen back through name → category → amount, dismissing the
+    /// whole flow from the first step.
     private func goBack() {
         switch step {
         case .name: dismiss()
@@ -471,6 +490,9 @@ struct AddTransactionFlow: View {
         }
     }
 
+    /// Validates the entry, writes the transaction and dismisses.
+    /// Refuses an unevaluable expression, a non-positive amount or a blank
+    /// name, surfacing the reason in `errorMessage` instead of saving.
     private func save() {
         guard let rawAmount = engine.result else {
             errorMessage = "That calculation didn't work out — check for a division by zero."
@@ -531,6 +553,12 @@ struct AddTransactionFlow: View {
 struct FlowLayout: Layout {
     var spacing: CGFloat = 8
 
+    /// Measures the wrapped rows at the proposed width.
+    /// - Parameters:
+    ///   - proposal: Size offered by the parent; an unset width means unbounded.
+    ///   - subviews: The chips to lay out.
+    ///   - cache: Unused.
+    /// - Returns: The size needed for all rows.
     func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
         let maxWidth = proposal.width ?? .infinity
         var rowWidth: CGFloat = 0
@@ -552,6 +580,12 @@ struct FlowLayout: Layout {
         return CGSize(width: maxWidth == .infinity ? rowWidth : maxWidth, height: totalHeight)
     }
 
+    /// Positions each chip left to right, wrapping to a new row at the edge.
+    /// - Parameters:
+    ///   - bounds: Rect to lay out within.
+    ///   - proposal: Size offered by the parent.
+    ///   - subviews: The chips to place.
+    ///   - cache: Unused.
     func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
         var x = bounds.minX
         var y = bounds.minY

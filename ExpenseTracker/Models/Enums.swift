@@ -8,6 +8,7 @@ enum TransactionType: String, Codable, CaseIterable, Identifiable {
 
     var id: String { rawValue }
 
+    /// Display name used on pickers and section headers.
     var title: String {
         switch self {
         case .expense: return "Expense"
@@ -18,8 +19,10 @@ enum TransactionType: String, Codable, CaseIterable, Identifiable {
     /// Multiplier applied to a stored (always positive) amount.
     var sign: Decimal { self == .expense ? -1 : 1 }
 
+    /// Accent colour for amounts and badges of this type.
     var tint: Color { self == .expense ? Theme.expense : Theme.income }
 
+    /// SF Symbol for the direction money moved.
     var symbolName: String {
         self == .expense ? "arrow.up.right" : "arrow.down.left"
     }
@@ -32,6 +35,7 @@ enum AccountKind: String, Codable, CaseIterable, Identifiable {
 
     var id: String { rawValue }
 
+    /// Full display name, used where there is room to spell it out.
     var title: String {
         switch self {
         case .bank: return "Bank Account"
@@ -40,6 +44,7 @@ enum AccountKind: String, Codable, CaseIterable, Identifiable {
         }
     }
 
+    /// Compact name for chips and dense rows.
     var shortTitle: String {
         switch self {
         case .bank: return "Bank"
@@ -48,6 +53,7 @@ enum AccountKind: String, Codable, CaseIterable, Identifiable {
         }
     }
 
+    /// Default SF Symbol for accounts of this kind.
     var symbolName: String {
         switch self {
         case .bank: return "building.columns"
@@ -68,6 +74,7 @@ enum RecurrenceFrequency: String, Codable, CaseIterable, Identifiable {
 
     var id: String { rawValue }
 
+    /// Display name used in the recurrence picker.
     var title: String {
         switch self {
         case .daily: return "Daily"
@@ -77,6 +84,9 @@ enum RecurrenceFrequency: String, Codable, CaseIterable, Identifiable {
         }
     }
 
+    /// The unit noun for this frequency, pluralised to match `interval`.
+    /// - Parameter interval: How many units each repeat spans.
+    /// - Returns: E.g. "month" for 1, "months" for 3.
     func unitLabel(interval: Int) -> String {
         let singular: String
         switch self {
@@ -88,6 +98,7 @@ enum RecurrenceFrequency: String, Codable, CaseIterable, Identifiable {
         return interval == 1 ? singular : "\(singular)s"
     }
 
+    /// The `Calendar` component to step by when computing occurrences.
     var calendarComponent: Calendar.Component {
         switch self {
         case .daily: return .day

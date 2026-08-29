@@ -3,6 +3,7 @@ import Foundation
 enum CalcOperator: String, CaseIterable {
     case add, subtract, multiply, divide
 
+    /// The glyph shown on the keypad — typographic − and ÷ rather than ASCII.
     var symbol: String {
         switch self {
         case .add: return "+"
@@ -12,6 +13,7 @@ enum CalcOperator: String, CaseIterable {
         }
     }
 
+    /// Binding strength: × and ÷ (2) are applied before + and − (1).
     var precedence: Int { (self == .multiply || self == .divide) ? 2 : 1 }
 }
 
@@ -29,11 +31,14 @@ struct CalculatorEngine {
 
     // MARK: - Queries
 
+    /// True when nothing has been entered at all, so the amount reads as zero.
     var isEmpty: Bool { operands.isEmpty && entry.isEmpty }
 
     /// True once there is arithmetic to show a running total for.
     var hasExpression: Bool { !operators.isEmpty }
 
+    /// The expression as typed, e.g. `12 + 3 ×`, with a lone `0` when empty.
+    /// A trailing operator stays visible so the user sees their own input.
     var displayText: String {
         var parts: [String] = []
         for (index, value) in operands.enumerated() {
@@ -88,6 +93,7 @@ struct CalculatorEngine {
         return total
     }
 
+    /// `result` formatted as currency, or `Error` when it cannot be evaluated.
     var resultText: String {
         guard let result else { return "Error" }
         return Formatters.currency(result.roundedToCurrency)
@@ -95,6 +101,8 @@ struct CalculatorEngine {
 
     // MARK: - Input
 
+    /// Appends one digit, capped at 12 integer and 2 fraction digits.
+    /// - Parameter digit: A single character, "0" through "9".
     mutating func input(digit: String) {
         // Drop a lone leading zero so "0" then "5" reads as "5", not "05".
         if entry == "0" { entry = "" }
@@ -104,12 +112,18 @@ struct CalculatorEngine {
         entry.append(digit)
     }
 
+    /// Starts the fractional part, seeding a leading `0` and ignoring a
+    /// second decimal point in the same number.
     mutating func inputDecimalPoint() {
         if entry.isEmpty { entry = "0" }
         guard !entry.contains(".") else { return }
         entry.append(".")
     }
 
+    /// Closes off the number being typed and queues `op` after it.
+    /// With nothing typed since the last operator, replaces that operator
+    /// rather than stacking a second one.
+    /// - Parameter op: The arithmetic operator the user tapped.
     mutating func input(operator op: CalcOperator) {
         if let typed = Self.parse(entry) {
             operands.append(typed)
@@ -136,6 +150,8 @@ struct CalculatorEngine {
         entry = ""
     }
 
+    /// Undoes one keypress: a digit, then an operator (which brings the
+    /// preceding operand back into the entry field), then a whole operand.
     mutating func backspace() {
         if !entry.isEmpty {
             entry.removeLast()
@@ -157,12 +173,16 @@ struct CalculatorEngine {
         }
     }
 
+    /// Resets to an empty expression.
     mutating func clear() {
         operands = []
         operators = []
         entry = ""
     }
 
+    /// Replaces the whole expression with a single amount, used when opening
+    /// the keypad on an existing transaction.
+    /// - Parameter value: The amount to load; zero leaves the field empty.
     mutating func setValue(_ value: Decimal) {
         operands = []
         operators = []
@@ -171,11 +191,15 @@ struct CalculatorEngine {
 
     // MARK: - Helpers
 
+    /// Reads entry text as a `Decimal`, returning nil for "" and a bare ".".
+    /// Parses POSIX-style so the dot is always the decimal separator.
     private static func parse(_ text: String) -> Decimal? {
         guard !text.isEmpty, text != "." else { return nil }
         return Decimal(string: text, locale: Locale(identifier: "en_US_POSIX"))
     }
 
+    /// Renders a completed operand for `displayText` — no grouping separators,
+    /// up to six fraction digits.
     private static func format(_ value: Decimal) -> String {
         value.formatted(.number.grouping(.never).precision(.fractionLength(0...6)))
     }

@@ -10,11 +10,13 @@ struct AmountText: View {
     /// When false the value is shown plain, without a +/− prefix or colour.
     var showsSign: Bool = true
 
+    /// The amount with `type`'s sign applied, or as-is when no type is set.
     private var signedValue: Decimal {
         guard let type else { return amount }
         return abs(amount) * type.sign
     }
 
+    /// Red for money out, green for money in, plain when signs are hidden.
     private var tint: Color {
         guard showsSign else { return .primary }
         if signedValue < 0 { return Theme.expense }

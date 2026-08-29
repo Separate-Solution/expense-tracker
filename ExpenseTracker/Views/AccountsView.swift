@@ -127,6 +127,9 @@ struct AccountsView: View {
             : "Delete “\(pendingDeletion.name)” and its \(count) transaction\(count == 1 ? "" : "s")?"
     }
 
+    /// Builds one row of the accounts list: badge, name, kind and balance.
+    /// - Parameter account: The account to render.
+    /// - Returns: The configured row view.
     private func accountRow(_ account: Account) -> some View {
         HStack(spacing: 12) {
             AccountBadge(symbolName: account.symbolName, colorHex: account.colorHex)
@@ -234,6 +237,8 @@ struct AccountEditorView: View {
         .onAppear(perform: load)
     }
 
+    /// Fills the form from the account being edited, or picks the next
+    /// unused palette colour for a new one.
     private func load() {
         guard let account else {
             colorHex = Theme.paletteHexes[accounts.count % Theme.paletteHexes.count]
@@ -246,6 +251,8 @@ struct AccountEditorView: View {
         note = account.note
     }
 
+    /// Creates or updates the account and dismisses.
+    /// An untouched symbol follows the account kind; a customised one is kept.
     private func save() {
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
         if let account {

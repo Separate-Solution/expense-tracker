@@ -44,6 +44,9 @@ extension Color {
 
 /// Card container used across the app — one place to change the whole look.
 struct CardBackground: ViewModifier {
+    /// Wraps `content` in the standard padded, rounded card surface.
+    /// - Parameter content: The view being decorated.
+    /// - Returns: The content on a card background.
     func body(content: Content) -> some View {
         content
             .padding(Theme.cardPadding)
@@ -55,6 +58,8 @@ struct CardBackground: ViewModifier {
 }
 
 extension View {
+    /// Applies the shared card surface — padding, corner radius and fill.
+    /// - Returns: The view wrapped in `CardBackground`.
     func cardBackground() -> some View { modifier(CardBackground()) }
 }
 
@@ -64,6 +69,7 @@ enum AppearanceMode: String, CaseIterable, Identifiable {
 
     var id: String { rawValue }
 
+    /// Display name shown in the appearance picker.
     var title: String {
         switch self {
         case .system: return "System"
@@ -72,6 +78,7 @@ enum AppearanceMode: String, CaseIterable, Identifiable {
         }
     }
 
+    /// The scheme to force, or nil to follow the device setting.
     var colorScheme: ColorScheme? {
         switch self {
         case .system: return nil

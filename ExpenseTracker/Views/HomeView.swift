@@ -125,6 +125,12 @@ struct HomeView: View {
         .cardBackground()
     }
 
+    /// One labelled figure in the month summary card.
+    /// - Parameters:
+    ///   - title: Caption above the figure, e.g. "Income".
+    ///   - amount: The value to show.
+    ///   - tint: Colour for the amount.
+    /// - Returns: The configured column view.
     private func summaryColumn(title: String, amount: Decimal, tint: Color) -> some View {
         VStack(spacing: 3) {
             Text(title)
@@ -357,6 +363,9 @@ struct HomeView: View {
         }
     }
 
+    /// A section title styled consistently across the overview.
+    /// - Parameter title: The heading text.
+    /// - Returns: The styled header view.
     private func sectionHeader(_ title: String) -> some View {
         Text(title)
             .font(.subheadline.weight(.semibold))

@@ -8,6 +8,8 @@ struct ExpenseTrackerApp: App {
 
     let container: ModelContainer
 
+    /// Builds the SwiftData container for the four persisted models.
+    /// A store that cannot be opened is treated as fatal at launch.
     init() {
         let schema = Schema([Account.self, Category.self, Transaction.self, RecurringRule.self])
         let configuration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: false)
@@ -20,6 +22,7 @@ struct ExpenseTrackerApp: App {
         }
     }
 
+    /// The stored appearance choice, defaulting to following the system.
     private var appearance: AppearanceMode {
         AppearanceMode(rawValue: appearanceRaw) ?? .system
     }

@@ -15,6 +15,11 @@ struct CSVColumnMappingView: View {
     @State private var dateFormats: [String]
     @State private var dateSample: String?
 
+    /// Seeds the editable mapping, date formats and preview sample from the
+    /// plan's automatic guess.
+    /// - Parameters:
+    ///   - plan: The parsed file awaiting import.
+    ///   - onImport: Called with the confirmed mapping when the user imports.
     init(plan: CSVImportPlan, onImport: @escaping (CSVColumnMapping) -> Void) {
         self.plan = plan
         self.onImport = onImport
@@ -79,6 +84,10 @@ struct CSVColumnMappingView: View {
         }
     }
 
+    /// One row of the column list: header, sample value and the fields
+    /// currently reading it.
+    /// - Parameter index: Column to render.
+    /// - Returns: The configured row view.
     private func columnPreview(_ index: Int) -> some View {
         let value = plan.value(inFirstRow: index)
         let assigned = fields(readingColumn: index)
@@ -149,6 +158,10 @@ struct CSVColumnMappingView: View {
         }
     }
 
+    /// Shows how a sample date reads under the chosen pattern, so a wrong
+    /// guess is visible before importing.
+    /// - Parameter sample: A raw value from the date column.
+    /// - Returns: The formatted date, or "Unreadable".
     private func previewDate(_ sample: String) -> String {
         guard let date = CSVService.parseDate(sample, using: mapping.datePattern) else {
             return "Unreadable"
@@ -225,6 +238,9 @@ struct CSVColumnMappingView: View {
 
     // MARK: - Helpers
 
+    /// A binding to the column assigned to `field`, for its picker.
+    /// - Parameter field: The field being assigned.
+    /// - Returns: A binding to its column index, nil when unassigned.
     private func binding(for field: CSVField) -> Binding<Int?> {
         Binding(
             get: { mapping.indices[field] },
@@ -232,11 +248,18 @@ struct CSVColumnMappingView: View {
         )
     }
 
+    /// The column's header, falling back to "Column N" when the file has none.
+    /// - Parameter index: Column to name.
+    /// - Returns: The display label.
     private func headerLabel(_ index: Int) -> String {
         let header = plan.headers[index]
         return header.isEmpty ? "Column \(index + 1)" : header
     }
 
+    /// Fields currently mapped to a column — more than one is allowed, and
+    /// none means the column is ignored.
+    /// - Parameter index: Column to check.
+    /// - Returns: The fields reading it.
     private func fields(readingColumn index: Int) -> [CSVField] {
         CSVField.assignable.filter { mapping.indices[$0] == index }
     }

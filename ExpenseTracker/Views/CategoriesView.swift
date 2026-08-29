@@ -133,6 +133,10 @@ struct CategoriesView: View {
         pendingDeletion = offsets.map { visible[$0] }
     }
 
+    /// Reorders categories and renumbers `sortIndex` across the visible list.
+    /// - Parameters:
+    ///   - source: Rows being moved.
+    ///   - destination: Index they are dropped before.
     private func move(from source: IndexSet, to destination: Int) {
         var reordered = visible
         reordered.move(fromOffsets: source, toOffset: destination)
@@ -211,6 +215,8 @@ struct CategoryEditorView: View {
         .onAppear(perform: load)
     }
 
+    /// Fills the form from the category being edited, or picks sensible
+    /// defaults (next palette colour, type-appropriate glyph) for a new one.
     private func load() {
         guard let category else {
             type = presetType
@@ -224,6 +230,9 @@ struct CategoryEditorView: View {
         type = category.type
     }
 
+    /// Creates or updates the category and dismisses.
+    /// A new category is appended after the last one of its type, and the
+    /// glyph is clipped to a single rendered emoji.
     private func save() {
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
         // Keep a single visible glyph even if the field holds a longer string.

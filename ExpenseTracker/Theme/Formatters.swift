@@ -21,6 +21,11 @@ enum Formatters {
         return rounded == whole ? 0 : 2
     }
 
+    /// Formats an amount in the app's currency.
+    /// - Parameters:
+    ///   - value: The amount; rounded to 2 places first.
+    ///   - showsSign: When true, prefixes positive values with "+".
+    /// - Returns: The formatted string, e.g. "₹1,299" or "+₹1,299.50".
     static func currency(_ value: Decimal, showsSign: Bool = false) -> String {
         let rounded = value.roundedToCurrency
         let formatted = rounded.formatted(
@@ -38,6 +43,9 @@ enum Formatters {
         )
     }
 
+    /// Formats an amount with an explicit +/− prefix, using a typographic minus.
+    /// - Parameter value: The amount; zero is returned unsigned.
+    /// - Returns: The signed, formatted string.
     static func signedCurrency(_ value: Decimal) -> String {
         let magnitude = currencyMagnitude(value)
         if value < 0 { return "−" + magnitude }
@@ -60,28 +68,36 @@ enum Formatters {
 }
 
 extension Date {
+    /// Midnight at the start of this date, in the current calendar.
     var startOfDay: Date { Calendar.current.startOfDay(for: self) }
 
+    /// The last second of this date — the inclusive upper bound for "today".
     var endOfDay: Date {
         Calendar.current.date(byAdding: DateComponents(day: 1, second: -1), to: startOfDay) ?? self
     }
 
+    /// Midnight on the first day of this date's month.
     var startOfMonth: Date {
         let components = Calendar.current.dateComponents([.year, .month], from: self)
         return Calendar.current.date(from: components) ?? startOfDay
     }
 
+    /// The last second of this date's month.
     var endOfMonth: Date {
         let next = Calendar.current.date(byAdding: DateComponents(month: 1), to: startOfMonth) ?? self
         return Calendar.current.date(byAdding: DateComponents(second: -1), to: next) ?? self
     }
 
+    /// Shifts the date by whole months, clamping to valid days.
+    /// - Parameter count: Months to add; negative moves backwards.
+    /// - Returns: The shifted date, or self if the calendar cannot produce one.
     func addingMonths(_ count: Int) -> Date {
         Calendar.current.date(byAdding: DateComponents(month: count), to: self) ?? self
     }
 }
 
 extension Decimal {
+    /// Lossy `Double` view, used only for chart geometry — never for money maths.
     var doubleValue: Double { NSDecimalNumber(decimal: self).doubleValue }
 
     /// Rounds to 2 decimal places — applied before anything is persisted.

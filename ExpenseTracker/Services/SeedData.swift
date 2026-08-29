@@ -59,6 +59,9 @@ enum SeedData {
         try? context.save()
     }
 
+    /// Inserts the built-in expense and income categories without saving.
+    /// Called on first launch and again after an erase.
+    /// - Parameter context: The context to insert into; the caller saves.
     static func insertDefaultCategories(in context: ModelContext) {
         for (index, seed) in expenseCategories.enumerated() {
             context.insert(Category(

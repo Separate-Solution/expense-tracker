@@ -117,6 +117,9 @@ struct CSVImportPlan: Identifiable {
     let rows: [[String]]
     let suggestedMapping: CSVColumnMapping
 
+    /// A copy of this plan carrying a different mapping.
+    /// - Parameter mapping: The mapping to substitute.
+    /// - Returns: A new plan over the same rows.
     func replacingSuggestedMapping(with mapping: CSVColumnMapping) -> CSVImportPlan {
         CSVImportPlan(headers: headers, rows: rows, suggestedMapping: mapping)
     }
@@ -135,12 +138,18 @@ struct CSVImportPlan: Identifiable {
         }
     }
 
+    /// Date patterns that parse every value in `index`.
+    /// - Parameter index: Column to sample; nil yields no formats.
+    /// - Returns: Matching patterns, most specific first.
     func dateFormats(inColumn index: Int?) -> [String] {
         CSVService.detectDateFormats(in: values(inColumn: index))
     }
 
     var firstRow: [String] { rows.first ?? [] }
 
+    /// The trimmed sample value shown as a preview for a column.
+    /// - Parameter index: Column to read.
+    /// - Returns: The value, or "" when the row is short.
     func value(inFirstRow index: Int) -> String {
         index < firstRow.count ? firstRow[index].trimmingCharacters(in: .whitespacesAndNewlines) : ""
     }
@@ -164,6 +173,9 @@ enum CSVService {
 
     // MARK: - Export
 
+    /// Renders transactions as CSV using `exportHeader`, oldest first.
+    /// - Parameter transactions: The rows to export.
+    /// - Returns: The complete CSV text.
     static func exportString(transactions: [Transaction]) -> String {
         var rows = [exportHeader.map(escape).joined(separator: ",")]
         let sorted = transactions.sorted { $0.date < $1.date }
@@ -261,6 +273,8 @@ enum CSVService {
         return punctuation(of: formatter.string(from: date)) == punctuation(of: sample)
     }
 
+    /// The separators in `text` with letters, digits and spaces stripped,
+    /// used to compare a re-formatted date against the original input.
     private static func punctuation(of text: String) -> String {
         String(text.filter { !$0.isLetter && !$0.isNumber && !$0.isWhitespace })
     }
@@ -288,6 +302,8 @@ enum CSVService {
 
         for (offset, row) in plan.rows.enumerated() {
             let lineNumber = offset + 2
+            /// Reads this row's value for a mapped field, or "" when the column
+            /// is unmapped or the row is short.
             func field(_ csvField: CSVField) -> String {
                 guard let index = mapping.indices[csvField], index < row.count else { return "" }
                 return row[index].trimmingCharacters(in: .whitespacesAndNewlines)
@@ -394,11 +410,15 @@ enum CSVService {
 
     // MARK: - Lookups
 
+    /// Accounts keyed by lowercased name, so an imported name reuses an
+    /// existing account instead of creating a near-duplicate.
     private static func existingAccountsByName(in context: ModelContext) throws -> [String: Account] {
         let accounts = try context.fetch(FetchDescriptor<Account>())
         return Dictionary(accounts.map { ($0.name.lowercased(), $0) }, uniquingKeysWith: { first, _ in first })
     }
 
+    /// Categories keyed by type and lowercased name — the same name can exist
+    /// once for expenses and once for income.
     private static func existingCategoriesByKey(in context: ModelContext) throws -> [String: Category] {
         let categories = try context.fetch(FetchDescriptor<Category>())
         return Dictionary(
@@ -407,12 +427,16 @@ enum CSVService {
         )
     }
 
+    /// IDs already in the store, used to skip rows from a re-imported export.
     private static func existingTransactionIDs(in context: ModelContext) throws -> Set<UUID> {
         Set(try context.fetch(FetchDescriptor<Transaction>()).map(\.id))
     }
 
     // MARK: - Field parsing
 
+    /// Reads the spellings of true/false that turn up in exported files.
+    /// - Parameter text: The cell value.
+    /// - Returns: The boolean, or nil when unrecognised.
     static func parseBool(_ text: String) -> Bool? {
         switch text.lowercased() {
         case "true", "yes", "y", "1": return true
@@ -446,6 +470,13 @@ enum CSVService {
         "fitness": "🏋️", "beauty": "🧴", "investment": "📈", "bank": "🏦"
     ]
 
+    /// Picks a category glyph: an explicit emoji if the file has one, else a
+    /// known icon name, else a default for the type.
+    /// - Parameters:
+    ///   - explicit: Value of the emoji column.
+    ///   - iconName: Value of the icon-name column.
+    ///   - type: Used to choose the fallback glyph.
+    /// - Returns: A single emoji.
     static func categoryEmoji(explicit: String, iconName: String, type: TransactionType) -> String {
         let trimmed = explicit.trimmingCharacters(in: .whitespacesAndNewlines)
         if let first = trimmed.first, first.isEmoji { return String(first) }
@@ -454,6 +485,9 @@ enum CSVService {
         return type == .expense ? "🏷️" : "💰"
     }
 
+    /// Maps bank-statement wording (debit/credit, in/out) to a transaction type.
+    /// - Parameter text: The cell value.
+    /// - Returns: The type, or nil when unrecognised.
     static func parseType(_ text: String) -> TransactionType? {
         switch text.lowercased() {
         case "expense", "debit", "dr", "spend", "spending", "out", "withdrawal":
@@ -512,6 +546,10 @@ enum CSVService {
         return ISO8601DateFormatter().date(from: trimmed)
     }
 
+    /// Guesses an account kind from its name when the file does not say —
+    /// "wallet" reads as cash, "visa" as credit, everything else as bank.
+    /// - Parameter name: The account name from the file.
+    /// - Returns: The inferred kind.
     private static func inferAccountKind(from name: String) -> AccountKind {
         let lowered = name.lowercased()
         if lowered.contains("cash") || lowered.contains("wallet") { return .cash }
@@ -549,6 +587,8 @@ enum CSVService {
         return cache
     }()
 
+    /// Builds a POSIX-locale formatter for `pattern`, so parsing never shifts
+    /// with the device's region settings.
     private static func makeDateFormatter(_ pattern: String) -> DateFormatter {
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "en_US_POSIX")
@@ -557,6 +597,10 @@ enum CSVService {
         return formatter
     }
 
+    /// A cached formatter for `pattern`, building one on demand if it is not
+    /// a known pattern.
+    /// - Parameter pattern: A `DateFormatter` format string.
+    /// - Returns: The formatter to parse with.
     static func formatter(for pattern: String) -> DateFormatter {
         formatterCache[pattern] ?? makeDateFormatter(pattern)
     }
@@ -565,6 +609,10 @@ enum CSVService {
 
     // MARK: - RFC 4180 parsing / escaping
 
+    /// Quotes a field for CSV output when it contains a comma, quote or
+    /// newline, doubling any embedded quotes.
+    /// - Parameter field: The raw value.
+    /// - Returns: The value, quoted only if it needs to be.
     static func escape(_ field: String) -> String {
         guard field.contains(",") || field.contains("\"") || field.contains("\n") || field.contains("\r") else {
             return field
@@ -581,10 +629,12 @@ enum CSVService {
         var insideQuotes = false
         var iterator = text.startIndex
 
+        /// Closes the field being accumulated and starts the next one.
         func endField() {
             currentRow.append(currentField)
             currentField = ""
         }
+        /// Closes the current field and the row it completes.
         func endRow() {
             endField()
             rows.append(currentRow)
@@ -631,6 +681,8 @@ enum CSVService {
         return rows.filter { !($0.count == 1 && $0[0].trimmingCharacters(in: .whitespaces).isEmpty) }
     }
 
+    /// Reduces a header to letters and digits so "Account Type", "account_type"
+    /// and "AccountType" all match the same alias.
     private static func normalizeKey(_ text: String) -> String {
         text.lowercased().filter { $0.isLetter || $0.isNumber }
     }

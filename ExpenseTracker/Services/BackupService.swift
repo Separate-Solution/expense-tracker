@@ -96,6 +96,11 @@ enum BackupService {
 
     // MARK: - Export
 
+    /// Snapshots the whole store — accounts, categories, rules and transactions —
+    /// into a codable payload, stamped with the current currency and app version.
+    /// - Parameter context: The context to read from.
+    /// - Returns: The populated payload.
+    /// - Throws: Any fetch error from the context.
     static func makePayload(from context: ModelContext) throws -> BackupPayload {
         var payload = BackupPayload()
         payload.currencyCode = Formatters.currencyCode
@@ -167,6 +172,11 @@ enum BackupService {
         return payload
     }
 
+    /// Encodes a payload as pretty-printed JSON with ISO-8601 dates and sorted
+    /// keys, so two backups of the same data diff cleanly.
+    /// - Parameter payload: The snapshot to encode.
+    /// - Returns: The JSON data to write to disk.
+    /// - Throws: Any `JSONEncoder` error.
     static func encode(_ payload: BackupPayload) throws -> Data {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
@@ -174,6 +184,11 @@ enum BackupService {
         return try encoder.encode(payload)
     }
 
+    /// Reads a backup file, rejecting anything unparseable or written by a
+    /// newer format version than this build understands.
+    /// - Parameter data: Contents of the chosen file.
+    /// - Returns: The decoded payload.
+    /// - Throws: `BackupError.unreadableFile` or `.unsupportedVersion`.
     static func decode(_ data: Data) throws -> BackupPayload {
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
