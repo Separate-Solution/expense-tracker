@@ -30,7 +30,6 @@ struct DateTimeRow: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .accessibilityAddTraits(.isButton)
             .accessibilityHint(isExpanded ? "Hides the picker" : "Shows the date and time picker")
 
             if isExpanded {

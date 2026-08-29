@@ -455,6 +455,12 @@ struct AddTransactionFlow: View {
                         .lineLimit(2...5)
                 }
             }
+            // The end date's picker is bounded by `date`, so moving the start
+            // past it has to carry it along — a selection below the bound
+            // leaves the picker showing a value it won't accept.
+            .onChange(of: date) { _, newDate in
+                if endDate < newDate { endDate = newDate }
+            }
             .navigationTitle("Details")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

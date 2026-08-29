@@ -66,8 +66,12 @@ struct TransactionsView: View {
     }
 
     private var isEverythingSelected: Bool {
-        !filtered.isEmpty && selectedIDs.count == filtered.count
+        !filtered.isEmpty && selectedTransactions.count == filtered.count
     }
+
+    /// Only ever counts rows the actions can actually reach: a `@Query` update
+    /// can retire a selected transaction without the filters having changed.
+    private var selectionCount: Int { selectedTransactions.count }
 
     var body: some View {
         NavigationStack {
@@ -201,9 +205,9 @@ struct TransactionsView: View {
                 Button("Cancel", role: .cancel) { pendingDeletion = nil }
             }
             .confirmationDialog(
-                selectedIDs.count == 1
+                selectionCount == 1
                     ? "Delete this transaction?"
-                    : "Delete \(selectedIDs.count) transactions?",
+                    : "Delete \(selectionCount) transactions?",
                 isPresented: $isConfirmingBulkDeletion,
                 titleVisibility: .visible
             ) {
@@ -272,7 +276,7 @@ struct TransactionsView: View {
 
             Spacer()
 
-            Text(selectedIDs.isEmpty ? "Select transactions" : "\(selectedIDs.count) selected")
+            Text(selectionCount == 0 ? "Select transactions" : "\(selectionCount) selected")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
 
@@ -285,7 +289,7 @@ struct TransactionsView: View {
                 Label("Duplicate", systemImage: "plus.square.on.square")
             }
         }
-        .disabled(selectedIDs.isEmpty)
+        .disabled(selectionCount == 0)
         .padding(.horizontal, 20)
         .padding(.vertical, 12)
         .background(.bar)
