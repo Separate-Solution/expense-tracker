@@ -3,6 +3,8 @@ import SwiftUI
 struct TransactionRow: View {
     let transaction: Transaction
     var showsDate: Bool = false
+    /// Time of day is worth showing where rows are already grouped by day.
+    var showsTime: Bool = false
 
     var body: some View {
         HStack(spacing: 12) {
@@ -26,6 +28,10 @@ struct TransactionRow: View {
                     if showsDate {
                         Text("·")
                         Text(transaction.date.formatted(.dateTime.day().month(.abbreviated)))
+                    }
+                    if showsTime {
+                        Text("·")
+                        Text(transaction.date.formatted(Formatters.timeOfDay))
                     }
                     if transaction.isRecurringInstance {
                         Image(systemName: "repeat")

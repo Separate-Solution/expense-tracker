@@ -5,6 +5,10 @@ struct TransactionsView: View {
 
     @Environment(\.modelContext) private var context
 
+    /// Owned by `RootView` so the floating add button can step aside while
+    /// rows are being selected.
+    @Binding var isSelecting: Bool
+
     @Query(sort: \Transaction.date, order: .reverse) private var transactions: [Transaction]
     @Query(sort: \Account.sortIndex) private var accounts: [Account]
     @Query(sort: \Category.sortIndex) private var categories: [Category]
@@ -15,6 +19,8 @@ struct TransactionsView: View {
     @State private var categoryFilter: UUID?
     @State private var editingTransaction: Transaction?
     @State private var pendingDeletion: Transaction?
+    @State private var selectedIDs: Set<UUID> = []
+    @State private var isConfirmingBulkDeletion = false
 
     private var hasActiveFilter: Bool {
         typeFilter != nil || accountFilter != nil || categoryFilter != nil
@@ -38,12 +44,29 @@ struct TransactionsView: View {
     private var sections: [(date: Date, items: [Transaction])] {
         let grouped = Dictionary(grouping: filtered) { $0.date.startOfDay }
         return grouped
-            .map { (date: $0.key, items: $0.value.sorted { $0.createdAt > $1.createdAt }) }
+            .map { group in
+                // Later in the day first; `createdAt` only breaks ties between
+                // two transactions logged at the same time.
+                let items = group.value.sorted {
+                    $0.date == $1.date ? $0.createdAt > $1.createdAt : $0.date > $1.date
+                }
+                return (date: group.key, items: items)
+            }
             .sorted { $0.date > $1.date }
     }
 
     private var filteredTotal: Decimal {
         filtered.reduce(Decimal.zero) { $0 + $1.signedAmount }
+    }
+
+    /// The transactions the bulk actions apply to — always the selected rows
+    /// that the current search and filters still show.
+    private var selectedTransactions: [Transaction] {
+        filtered.filter { selectedIDs.contains($0.id) }
+    }
+
+    private var isEverythingSelected: Bool {
+        !filtered.isEmpty && selectedIDs.count == filtered.count
     }
 
     var body: some View {
@@ -90,19 +113,7 @@ struct TransactionsView: View {
                     ForEach(sections, id: \.date) { section in
                         Section {
                             ForEach(section.items) { transaction in
-                                Button {
-                                    editingTransaction = transaction
-                                } label: {
-                                    TransactionRow(transaction: transaction)
-                                }
-                                .buttonStyle(.plain)
-                                .swipeActions(edge: .trailing) {
-                                    Button(role: .destructive) {
-                                        pendingDeletion = transaction
-                                    } label: {
-                                        Label("Delete", systemImage: "trash")
-                                    }
-                                }
+                                row(for: transaction)
                             }
                         } header: {
                             HStack {
@@ -134,9 +145,40 @@ struct TransactionsView: View {
             .navigationTitle("Transactions")
             .navigationBarTitleDisplayMode(.large)
             .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    filterMenu
+                ToolbarItem(placement: .topBarLeading) {
+                    if isSelecting {
+                        Button("Done") { endSelection() }
+                    } else if !filtered.isEmpty {
+                        Button("Select") {
+                            withAnimation(.snappy(duration: 0.2)) { isSelecting = true }
+                        }
+                    }
                 }
+                ToolbarItem(placement: .topBarTrailing) {
+                    if isSelecting {
+                        Button(isEverythingSelected ? "Deselect All" : "Select All") {
+                            // Scoped to what the filters currently show, so
+                            // "Select All" never reaches a hidden transaction.
+                            selectedIDs = isEverythingSelected ? [] : Set(filtered.map(\.id))
+                        }
+                    } else {
+                        filterMenu
+                    }
+                }
+            }
+            .safeAreaInset(edge: .bottom) {
+                if isSelecting {
+                    selectionActionBar
+                        .transition(.move(edge: .bottom))
+                }
+            }
+            // Filters can change under a selection; drop anything they hide so
+            // the actions only ever touch rows that are on screen.
+            .onChange(of: filterSignature) { _, _ in
+                selectedIDs = Set(selectedTransactions.map(\.id))
+            }
+            .onChange(of: isSelecting) { _, selecting in
+                if !selecting { selectedIDs = [] }
             }
             .sheet(item: $editingTransaction) { transaction in
                 TransactionEditorView(transaction: transaction)
@@ -158,7 +200,104 @@ struct TransactionsView: View {
                 }
                 Button("Cancel", role: .cancel) { pendingDeletion = nil }
             }
+            .confirmationDialog(
+                selectedIDs.count == 1
+                    ? "Delete this transaction?"
+                    : "Delete \(selectedIDs.count) transactions?",
+                isPresented: $isConfirmingBulkDeletion,
+                titleVisibility: .visible
+            ) {
+                Button("Delete", role: .destructive, action: deleteSelected)
+                Button("Cancel", role: .cancel) { }
+            }
         }
+    }
+
+    // MARK: - Rows
+
+    /// One transaction row — a checkbox toggle while selecting, otherwise a
+    /// button that opens the editor.
+    /// - Parameter transaction: The transaction to render.
+    /// - Returns: The configured row.
+    private func row(for transaction: Transaction) -> some View {
+        let isSelected = selectedIDs.contains(transaction.id)
+        return Button {
+            if isSelecting {
+                toggleSelection(of: transaction)
+            } else {
+                editingTransaction = transaction
+            }
+        } label: {
+            HStack(spacing: 12) {
+                if isSelecting {
+                    Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
+                        .font(.title3)
+                        .foregroundStyle(isSelected ? Color.accentColor : Color.secondary)
+                        .accessibilityHidden(true)
+                }
+                TransactionRow(transaction: transaction, showsTime: true)
+            }
+        }
+        .buttonStyle(.plain)
+        .accessibilityAddTraits(isSelecting && isSelected ? [.isSelected] : [])
+        .swipeActions(edge: .trailing) {
+            if !isSelecting {
+                Button(role: .destructive) {
+                    pendingDeletion = transaction
+                } label: {
+                    Label("Delete", systemImage: "trash")
+                }
+            }
+        }
+        .swipeActions(edge: .leading) {
+            if !isSelecting {
+                Button {
+                    duplicate([transaction])
+                } label: {
+                    Label("Duplicate", systemImage: "plus.square.on.square")
+                }
+                .tint(.accentColor)
+            }
+        }
+    }
+
+    private var selectionActionBar: some View {
+        HStack {
+            Button(role: .destructive) {
+                isConfirmingBulkDeletion = true
+            } label: {
+                Label("Delete", systemImage: "trash")
+            }
+            .tint(.red)
+
+            Spacer()
+
+            Text(selectedIDs.isEmpty ? "Select transactions" : "\(selectedIDs.count) selected")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+
+            Spacer()
+
+            Button {
+                duplicate(selectedTransactions)
+                endSelection()
+            } label: {
+                Label("Duplicate", systemImage: "plus.square.on.square")
+            }
+        }
+        .disabled(selectedIDs.isEmpty)
+        .padding(.horizontal, 20)
+        .padding(.vertical, 12)
+        .background(.bar)
+    }
+
+    // MARK: - Filters
+
+    /// Everything the filtered list depends on, so a change can prune the
+    /// selection without recomputing the whole list to compare it.
+    private var filterSignature: String {
+        [typeFilter?.rawValue ?? "", accountFilter?.uuidString ?? "",
+         categoryFilter?.uuidString ?? "", searchText].joined(separator: "|")
     }
 
     private var filterMenu: some View {
@@ -197,5 +336,48 @@ struct TransactionsView: View {
                   ? "line.3.horizontal.decrease.circle.fill"
                   : "line.3.horizontal.decrease.circle")
         }
+    }
+
+    // MARK: - Selection actions
+
+    /// Adds or removes one transaction from the selection.
+    /// - Parameter transaction: The row that was tapped.
+    private func toggleSelection(of transaction: Transaction) {
+        if selectedIDs.contains(transaction.id) {
+            selectedIDs.remove(transaction.id)
+        } else {
+            selectedIDs.insert(transaction.id)
+        }
+    }
+
+    private func endSelection() {
+        withAnimation(.snappy(duration: 0.2)) {
+            isSelecting = false
+            selectedIDs = []
+        }
+    }
+
+    /// Deletes the selected transactions and leaves selection mode.
+    private func deleteSelected() {
+        let doomed = selectedTransactions
+        guard !doomed.isEmpty else { return }
+        for transaction in doomed {
+            context.delete(transaction)
+        }
+        try? context.save()
+        UINotificationFeedbackGenerator().notificationOccurred(.success)
+        endSelection()
+    }
+
+    /// Inserts a standalone copy of each transaction, keeping its date, time
+    /// and every other field.
+    /// - Parameter originals: The transactions to copy.
+    private func duplicate(_ originals: [Transaction]) {
+        guard !originals.isEmpty else { return }
+        for original in originals {
+            context.insert(original.duplicated())
+        }
+        try? context.save()
+        UINotificationFeedbackGenerator().notificationOccurred(.success)
     }
 }

@@ -56,6 +56,9 @@ enum Formatters {
     static let dayHeader: Date.FormatStyle = .dateTime.weekday(.wide).day().month(.abbreviated)
     static let shortDate: Date.FormatStyle = .dateTime.day().month(.abbreviated).year()
     static let monthTitle: Date.FormatStyle = .dateTime.month(.wide).year()
+    /// Time of day, in the reader's 12/24-hour preference.
+    static let timeOfDay: Date.FormatStyle = .dateTime.hour().minute()
+    static let dateAndTime: Date.FormatStyle = .dateTime.day().month(.abbreviated).year().hour().minute()
 
     /// "Today" / "Yesterday" / "Tomorrow", otherwise a full date.
     static func relativeDayLabel(for date: Date) -> String {

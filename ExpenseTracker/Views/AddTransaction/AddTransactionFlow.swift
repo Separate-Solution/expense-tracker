@@ -346,7 +346,7 @@ struct AddTransactionFlow: View {
             HStack(spacing: 8) {
                 chip(
                     systemImage: "calendar",
-                    text: Formatters.relativeDayLabel(for: date),
+                    text: "\(Formatters.relativeDayLabel(for: date)), \(date.formatted(Formatters.timeOfDay))",
                     isActive: !Calendar.current.isDateInToday(date)
                 ) { isShowingDetails = true }
 
@@ -407,7 +407,7 @@ struct AddTransactionFlow: View {
         NavigationStack {
             Form {
                 Section("When") {
-                    DatePicker("Date", selection: $date, displayedComponents: .date)
+                    DateTimeRow(label: "Date & Time", selection: $date)
                     if date > Date.now.endOfDay {
                         Label("This will be logged as an upcoming transaction.",
                               systemImage: "clock.arrow.circlepath")
@@ -442,7 +442,7 @@ struct AddTransactionFlow: View {
                                 value: $interval, in: 1...30)
                         Toggle("Has an end date", isOn: $hasEndDate.animation())
                         if hasEndDate {
-                            DatePicker("Ends", selection: $endDate, in: date..., displayedComponents: .date)
+                            DateTimeRow(label: "Ends", selection: $endDate, range: date...)
                         }
                         if date < Date.now.startOfDay {
                             Toggle("Backfill past occurrences", isOn: $backfillPastOccurrences)

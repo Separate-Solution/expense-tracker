@@ -79,7 +79,7 @@ struct TransactionEditorView: View {
                         }
                     }
 
-                    DatePicker("Date", selection: $date, displayedComponents: .date)
+                    DateTimeRow(label: "Date & Time", selection: $date)
                 }
 
                 Section("Note") {
