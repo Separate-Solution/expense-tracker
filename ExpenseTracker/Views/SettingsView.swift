@@ -134,7 +134,13 @@ struct CurrencyPickerView: View {
                 }
             }
         }
-        .searchable(text: $searchText, prompt: "Search currencies")
+        // `.always` keeps the field pinned under the title instead of hiding it
+        // until the list is pulled down.
+        .searchable(
+            text: $searchText,
+            placement: .navigationBarDrawer(displayMode: .always),
+            prompt: "Search currencies"
+        )
         .navigationTitle("Currency")
         .navigationBarTitleDisplayMode(.inline)
     }
