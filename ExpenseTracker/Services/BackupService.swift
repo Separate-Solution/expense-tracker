@@ -4,7 +4,10 @@ import SwiftData
 /// Full-fidelity local backup: every account, category, rule and transaction in
 /// one JSON file, with relationships stored as IDs so restore can rebuild them.
 struct BackupPayload: Codable {
-    static let currentFormatVersion = 1
+    /// 2 dropped the required `emoji` field from categories in favour of
+    /// `symbolName`. Older builds require `emoji`, so the bump makes them
+    /// report "made by a newer version" instead of failing to decode.
+    static let currentFormatVersion = 2
 
     var formatVersion: Int = BackupPayload.currentFormatVersion
     var exportedAt: Date = Date()

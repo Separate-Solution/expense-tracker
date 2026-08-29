@@ -219,9 +219,7 @@ struct CategoryEditorView: View {
         guard let category else {
             type = presetType
             colorHex = Theme.paletteHexes[categories.count % Theme.paletteHexes.count]
-            symbolName = presetType == .expense
-                ? CategoryIcon.expenseFallback
-                : CategoryIcon.incomeFallback
+            symbolName = CategoryIcon.fallback(for: presetType)
             return
         }
         name = category.name

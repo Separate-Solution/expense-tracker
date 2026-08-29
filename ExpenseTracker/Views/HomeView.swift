@@ -191,7 +191,8 @@ struct HomeView: View {
                 UpcomingItem(
                     id: transaction.id.uuidString,
                     title: transaction.title,
-                    symbolName: transaction.category?.symbol ?? CategoryIcon.expenseFallback,
+                    symbolName: transaction.category?.symbol
+                        ?? CategoryIcon.fallback(for: transaction.type),
                     colorHex: transaction.category?.colorHex ?? Theme.paletteHexes[8],
                     amount: transaction.amount,
                     type: transaction.type,

@@ -115,13 +115,3 @@ enum SettingsKey {
     static let defaultAccountID = "settings.defaultAccountID"
     static let didSeedDefaults = "settings.didSeedDefaults"
 }
-
-extension Character {
-    /// True for characters that actually render as emoji, used when deciding
-    /// whether an imported "emoji" column holds a real glyph.
-    var isEmoji: Bool {
-        guard let scalar = unicodeScalars.first else { return false }
-        return scalar.properties.isEmojiPresentation
-            || (scalar.properties.isEmoji && unicodeScalars.count > 1)
-    }
-}

@@ -472,8 +472,11 @@ enum CSVService {
         iconName: String,
         type: TransactionType
     ) -> String {
+        // No emoji-presentation check first: text-presentation glyphs like "✈"
+        // are mapped too, and an unrecognised value already comes back nil.
         let trimmed = explicit.trimmingCharacters(in: .whitespacesAndNewlines)
-        if let first = trimmed.first, first.isEmoji,
+        if let mapped = CategoryIcon.symbol(forEmoji: trimmed) { return mapped }
+        if let first = trimmed.first,
            let mapped = CategoryIcon.symbol(forEmoji: String(first)) {
             return mapped
         }

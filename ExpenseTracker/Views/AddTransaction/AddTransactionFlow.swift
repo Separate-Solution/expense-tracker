@@ -316,7 +316,7 @@ struct AddTransactionFlow: View {
                 step = .category
             } label: {
                 CategoryBadge(
-                    symbolName: selectedCategory?.symbol ?? CategoryIcon.expenseFallback,
+                    symbolName: selectedCategory?.symbol ?? CategoryIcon.fallback(for: type),
                     colorHex: selectedCategory?.colorHex ?? Theme.paletteHexes[8],
                     size: 42
                 )

@@ -16,6 +16,14 @@ enum CategoryIcon {
     /// Stands in for a recurring rule whose category was deleted.
     static let recurringFallback = "arrow.triangle.2.circlepath"
 
+    /// The fallback for a transaction with no category, so uncategorized
+    /// income is not badged with the expense icon.
+    /// - Parameter type: The transaction's type.
+    /// - Returns: An SF Symbol name.
+    static func fallback(for type: TransactionType) -> String {
+        type == .expense ? expenseFallback : incomeFallback
+    }
+
     /// One labelled block of the picker.
     struct Group: Identifiable {
         let title: String
@@ -87,7 +95,7 @@ enum CategoryIcon {
     static func inferred(name: String, emoji: String = "", type: TransactionType) -> String {
         if let fromEmoji = symbol(forEmoji: emoji) { return fromEmoji }
         if let fromName = symbol(forName: name) { return fromName }
-        return type == .expense ? expenseFallback : incomeFallback
+        return fallback(for: type)
     }
 
     /// Maps a legacy glyph to its closest symbol.
