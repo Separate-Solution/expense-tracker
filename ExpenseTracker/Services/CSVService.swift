@@ -458,8 +458,7 @@ enum CSVService {
             } else {
                 kind = .standard
             }
-            // A destination with nothing to leave from isn't a transfer.
-            if kind != .transfer { toAccount = nil }
+
 
             let categoryName = field(.category)
             var category: Category?
@@ -507,6 +506,9 @@ enum CSVService {
                 toAccount: toAccount,
                 category: category
             )
+            // A file can describe a row that is several things at once; this
+            // settles it into exactly one, the same way a restore does.
+            transaction.normaliseMovement()
             context.insert(transaction)
             summary.imported += 1
         }

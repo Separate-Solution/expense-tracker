@@ -163,6 +163,10 @@ final class Transaction {
                 toAccount = nil
             } else {
                 type = .expense
+                // A transfer moves money between accounts and has nothing to do
+                // with a card. A stray link here would be read as a purchase and
+                // add the amount to that card's debt.
+                creditCard = nil
             }
         case .cardPayment:
             if account == nil || creditCard == nil {

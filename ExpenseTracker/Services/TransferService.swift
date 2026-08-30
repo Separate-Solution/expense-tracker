@@ -61,7 +61,15 @@ enum TransferService {
             category: nil
         )
         context.insert(movement)
-        try? context.save()
+        do {
+            try context.save()
+        } catch {
+            // The sheet reports what it is told, so a swallowed failure would
+            // dismiss on a success it never had. Take the half-made row back
+            // out too, or the next successful save anywhere would commit it.
+            context.delete(movement)
+            throw error
+        }
         return movement
     }
 }

@@ -259,6 +259,9 @@ struct TransactionEditorView: View {
             transaction.account = PaymentSourceResolver.account(source, in: selectableAccounts)
             transaction.creditCard = PaymentSourceResolver.card(source, in: selectableCards)
         }
+        // Settles the row into exactly one shape — clearing a card left on a
+        // transfer, or a destination left on anything else.
+        transaction.normaliseMovement()
         transaction.updatedAt = Date()
         try? context.save()
         dismiss()
