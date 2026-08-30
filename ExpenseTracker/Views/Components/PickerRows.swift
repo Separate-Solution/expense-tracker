@@ -21,7 +21,10 @@ struct ColorSwatchPicker: View {
                 }
             }
             .padding(.vertical, 6)
-            .padding(.horizontal, 2)
+            // The selection ring is drawn 3pt outside the swatch with a 2.5pt
+            // stroke, so it needs more room than the swatches themselves —
+            // 2pt clipped the first one against the scroll view's edge.
+            .padding(.horizontal, 6)
         }
     }
 }
