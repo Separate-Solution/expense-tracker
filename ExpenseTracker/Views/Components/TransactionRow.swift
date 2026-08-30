@@ -6,16 +6,20 @@ struct TransactionRow: View {
     /// Time of day is worth showing where rows are already grouped by day.
     var showsTime: Bool = false
 
-    /// A bill payment borrows the card’s look, since it has no category.
+    /// A movement has no category, so it borrows the look of the thing it
+    /// moves money to — the card it settles, or the account it lands in.
     private var badgeSymbol: String {
-        transaction.isCardPayment
-            ? "creditcard"
-            : (transaction.category?.symbol ?? CategoryIcon.fallback(for: transaction.type))
+        if transaction.isCardPayment { return "creditcard" }
+        if transaction.isTransfer { return "arrow.left.arrow.right" }
+        return transaction.category?.symbol ?? CategoryIcon.fallback(for: transaction.type)
     }
 
     private var badgeColorHex: String {
         if transaction.isCardPayment {
             return transaction.creditCard?.colorHex ?? Theme.paletteHexes[8]
+        }
+        if transaction.isTransfer {
+            return transaction.toAccount?.colorHex ?? Theme.paletteHexes[8]
         }
         return transaction.category?.colorHex ?? Theme.paletteHexes[8]
     }
@@ -31,14 +35,14 @@ struct TransactionRow: View {
                     .lineLimit(1)
 
                 HStack(spacing: 5) {
-                    // A bill payment has no category; naming the card it
-                    // settles is what actually tells you what the row is.
-                    Text(transaction.isCardPayment
-                         ? "Card payment"
+                    // A movement has no category; naming both ends is what
+                    // actually tells you what the row is.
+                    Text(transaction.isMovement
+                         ? transaction.kind.title
                          : (transaction.category?.name ?? "Uncategorized"))
-                    if let sourceName = transaction.sourceName {
+                    if let detail = transaction.movementSummary ?? transaction.sourceName {
                         Text("·")
-                        Text(sourceName)
+                        Text(detail)
                     }
                     if showsDate {
                         Text("·")
@@ -52,8 +56,8 @@ struct TransactionRow: View {
                         Image(systemName: "repeat")
                             .font(.caption2)
                     }
-                    if transaction.isCardPayment {
-                        Image(systemName: "arrow.left.arrow.right")
+                    if transaction.isMovement {
+                        Image(systemName: transaction.kind.symbolName)
                             .font(.caption2)
                     }
                 }
@@ -69,7 +73,7 @@ struct TransactionRow: View {
                     amount: transaction.amount,
                     type: transaction.type,
                     font: .callout,
-                    isNeutral: transaction.isCardPayment
+                    isNeutral: transaction.isMovement
                 )
                 if transaction.isScheduled {
                     Text("Upcoming")

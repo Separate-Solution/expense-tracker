@@ -9,7 +9,8 @@ final class Transaction {
     /// Always stored as a positive magnitude; `type` decides the sign.
     var amount: Decimal = Decimal.zero
     var typeRaw: String = TransactionType.expense.rawValue
-    /// Standard spending/income, or a credit card bill payment.
+    /// Standard spending/income, a credit card bill payment, or a transfer
+    /// between two accounts.
     var kindRaw: String = TransactionKind.standard.rawValue
     var date: Date = Date()
     var note: String = ""
@@ -22,6 +23,9 @@ final class Transaction {
     /// Credit card the money moved through. On a card payment this is the card
     /// being paid *off*; on a purchase it is the card that was swiped.
     var creditCard: CreditCard?
+    /// Destination of a transfer — the account the money lands in. `account` is
+    /// the side it leaves, so a transfer is one row touching both.
+    var toAccount: Account?
     var category: Category?
 
     /// Set when this transaction was generated from a recurring rule.
@@ -36,9 +40,10 @@ final class Transaction {
     ///   - type: Expense or income.
     ///   - date: When it happened; a future date makes it scheduled.
     ///   - note: Free-text note.
-    ///   - kind: Standard transaction or a credit card bill payment.
-    ///   - account: Owning bank account, if any.
+    ///   - kind: Standard transaction, card bill payment, or transfer.
+    ///   - account: Owning bank account, if any. The source side of a transfer.
     ///   - creditCard: Owning credit card, if any.
+    ///   - toAccount: Destination account, on a transfer.
     ///   - category: Category, if any.
     ///   - recurringRule: Rule that generated this, when applicable.
     ///   - createdAt: Creation timestamp; also seeds `updatedAt`.
@@ -52,6 +57,7 @@ final class Transaction {
         kind: TransactionKind = .standard,
         account: Account? = nil,
         creditCard: CreditCard? = nil,
+        toAccount: Account? = nil,
         category: Category? = nil,
         recurringRule: RecurringRule? = nil,
         createdAt: Date = Date()
@@ -65,6 +71,7 @@ final class Transaction {
         self.note = note
         self.account = account
         self.creditCard = creditCard
+        self.toAccount = toAccount
         self.category = category
         self.recurringRule = recurringRule
         self.createdAt = createdAt
@@ -89,6 +96,12 @@ final class Transaction {
     /// True when this row settles a credit card bill rather than recording
     /// spending. Such rows are kept out of income and expense totals.
     var isCardPayment: Bool { kind == .cardPayment }
+
+    /// True when this row moves money between two of your own accounts.
+    var isTransfer: Bool { kind == .transfer }
+
+    /// True for a card payment or a transfer — money moved rather than spent.
+    var isMovement: Bool { kind.isMovement }
 
     /// Whether this belongs in the month's income and spending figures.
     var countsTowardsTotals: Bool { kind.countsTowardsTotals }
@@ -117,6 +130,36 @@ final class Transaction {
         return creditCard?.name ?? account?.name
     }
 
+    /// Where the money went, for a row that has two ends: the card a payment
+    /// settles, or the account a transfer lands in.
+    var destinationName: String? {
+        if isCardPayment { return creditCard?.name }
+        if isTransfer { return toAccount?.name }
+        return nil
+    }
+
+    /// "Cash → icici bank" for a movement, so one line says both ends.
+    var movementSummary: String? {
+        guard let sourceName, let destinationName else { return nil }
+        return "\(sourceName) \u{2192} \(destinationName)"
+    }
+
+    /// Whether this row touches `source` at either end. A transfer belongs to
+    /// both accounts it moves between, so filtering by either should find it.
+    /// - Parameter source: The account or card being filtered on.
+    /// - Returns: True when this row involves it.
+    func involves(_ source: PaymentSource) -> Bool {
+        if paymentSource == source { return true }
+        switch source {
+        case .account(let id):
+            return toAccount?.id == id
+        case .creditCard(let id):
+            // A card payment reports its paying account as the source, so the
+            // card it settles is only reachable through this side.
+            return creditCard?.id == id
+        }
+    }
+
     /// A transaction dated in the future — shown separately as "Upcoming".
     var isScheduled: Bool { date > Date.now.endOfDay }
 
@@ -141,6 +184,7 @@ final class Transaction {
             kind: kind,
             account: account,
             creditCard: creditCard,
+            toAccount: toAccount,
             category: category,
             createdAt: createdAt
         )

@@ -29,7 +29,8 @@ enum CSVError: LocalizedError {
 
 /// A transaction field that can be read from a CSV column.
 enum CSVField: String, CaseIterable, Identifiable {
-    case date, time, amount, type, title, category, account, accountKind, creditCard, note, id
+    case date, time, amount, type, title, category, account, accountKind, creditCard
+    case transferTo, note, id
     case income, color, icon, emoji
 
     var id: String { rawValue }
@@ -37,7 +38,7 @@ enum CSVField: String, CaseIterable, Identifiable {
     /// Fields offered on the mapping screen, in the order they're shown.
     static let assignable: [CSVField] = [
         .date, .time, .amount, .type, .title, .category,
-        .account, .accountKind, .creditCard, .note, .id
+        .account, .accountKind, .creditCard, .transferTo, .note, .id
     ]
 
     var label: String {
@@ -51,6 +52,7 @@ enum CSVField: String, CaseIterable, Identifiable {
         case .account: return "Account"
         case .accountKind: return "Account Type"
         case .creditCard: return "Credit Card"
+        case .transferTo: return "Transfer To"
         case .note: return "Note"
         case .id: return "ID"
         case .income: return "Income flag"
@@ -75,6 +77,7 @@ enum CSVField: String, CaseIterable, Identifiable {
         case .account: return "Everything goes into your first account."
         case .accountKind: return "Guessed from the account name."
         case .creditCard: return "Nothing is charged to a credit card."
+        case .transferTo: return "No row is treated as a transfer between accounts."
         case .note: return "Notes are left empty."
         case .id: return "Duplicates can't be detected, so importing this file twice adds it twice."
         default: return ""
@@ -94,6 +97,7 @@ enum CSVField: String, CaseIterable, Identifiable {
         case .account: return ["account", "accountname", "bank", "source"]
         case .accountKind: return ["accounttype", "accountkind"]
         case .creditCard: return ["creditcard", "card", "cardname", "creditcardname"]
+        case .transferTo: return ["transferto", "toaccount", "destination", "transferaccount"]
         case .note: return ["note", "notes", "memo", "comment"]
         case .id: return ["id", "uuid", "transactionid"]
         case .income: return ["income", "isincome"]
@@ -176,7 +180,7 @@ enum CSVService {
 
     static let exportHeader = [
         "Date", "Time", "Title", "Type", "Amount", "Currency",
-        "Account", "Account Type", "Credit Card", "Category", "Note", "ID"
+        "Account", "Account Type", "Credit Card", "Transfer To", "Category", "Note", "ID"
     ]
 
     // MARK: - Export
@@ -199,6 +203,7 @@ enum CSVService {
                 transaction.account?.name ?? "",
                 transaction.account?.kind.rawValue ?? "",
                 transaction.creditCard?.name ?? "",
+                transaction.toAccount?.name ?? "",
                 transaction.category?.name ?? "",
                 transaction.note,
                 transaction.id.uuidString
@@ -416,8 +421,37 @@ enum CSVService {
                 }
             }
 
-            let kind: TransactionKind =
-                (creditCard != nil && account != nil) ? .cardPayment : .standard
+            // A destination account makes the row a transfer out of `account`.
+            let transferToName = field(.transferTo)
+            var toAccount: Account?
+            if !transferToName.isEmpty, transferToName.lowercased() != accountName.lowercased() {
+                let key = transferToName.lowercased()
+                if let existing = accountCache[key] {
+                    toAccount = existing
+                } else {
+                    let created = Account(
+                        name: transferToName,
+                        kind: inferAccountKind(from: transferToName),
+                        colorHex: Theme.paletteHexes[accountCache.count % Theme.paletteHexes.count],
+                        sortIndex: accountCache.count
+                    )
+                    context.insert(created)
+                    accountCache[key] = created
+                    toAccount = created
+                    summary.createdAccounts.append(transferToName)
+                }
+            }
+
+            let kind: TransactionKind
+            if toAccount != nil, account != nil {
+                kind = .transfer
+            } else if creditCard != nil, account != nil {
+                kind = .cardPayment
+            } else {
+                kind = .standard
+            }
+            // A destination with nothing to leave from isn't a transfer.
+            if kind != .transfer { toAccount = nil }
 
             let categoryName = field(.category)
             var category: Category?
@@ -460,6 +494,7 @@ enum CSVService {
                 kind: kind,
                 account: account,
                 creditCard: creditCard,
+                toAccount: toAccount,
                 category: category
             )
             context.insert(transaction)

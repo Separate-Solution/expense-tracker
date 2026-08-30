@@ -19,6 +19,8 @@ struct TransactionEditorView: View {
     @State private var type: TransactionType = .expense
     @State private var categoryID: UUID?
     @State private var source: PaymentSource?
+    /// The other end of a transfer.
+    @State private var destinationID: UUID?
     @State private var date = Date()
     @State private var note = ""
     @State private var amount: Decimal = .zero
@@ -31,7 +33,14 @@ struct TransactionEditorView: View {
     }
 
     private var canSave: Bool {
-        amount > 0 && !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        guard amount > 0, !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            return false
+        }
+        guard transaction.isTransfer else { return true }
+        // Both ends have to exist and differ, or the money would land nowhere
+        // or come straight back to where it started.
+        let sourceID = PaymentSourceResolver.account(source, in: accounts)?.id
+        return sourceID != nil && destinationID != nil && sourceID != destinationID
     }
 
     var body: some View {
@@ -49,10 +58,10 @@ struct TransactionEditorView: View {
                         }
                     }
 
-                    // A bill payment only ever moves money out of the account and
-                    // off the card. Letting its direction be switched to income
-                    // would credit the account while still clearing the debt.
-                    if !transaction.isCardPayment {
+                    // A movement only ever leaves its source; the other end picks
+                    // it up. Letting the direction be switched to income would
+                    // credit both sides at once, inventing money.
+                    if !transaction.isMovement {
                         Picker("Type", selection: $type) {
                             ForEach(TransactionType.allCases) { option in
                                 Text(option.title).tag(option)
@@ -72,11 +81,11 @@ struct TransactionEditorView: View {
                 Section("Details") {
                     TextField("Title", text: $title)
 
-                    // A bill payment isn't spending, so it has no category to
-                    // put it under. Offering one would file it in a breakdown
-                    // that deliberately ignores it, and let a category filter
-                    // surface a row that reads "Card payment".
-                    if !transaction.isCardPayment {
+                    // A movement isn't spending, so it has no category to put it
+                    // under. Offering one would file it in a breakdown that
+                    // deliberately ignores it, and let a category filter surface
+                    // a row that reads "Transfer".
+                    if !transaction.isMovement {
                         Picker("Category", selection: $categoryID) {
                             Text("Uncategorized").tag(UUID?.none)
                             ForEach(categories) { category in
@@ -86,15 +95,28 @@ struct TransactionEditorView: View {
                         }
                     }
 
-                    // A bill payment always leaves a bank account and always
-                    // lands on its card, so only the account is up for change.
+                    // A movement always leaves an account, so its source is never
+                    // "none" and never a card. A bill payment's card is fixed;
+                    // a transfer's destination can be changed below.
                     PaymentSourcePicker(
-                        label: transaction.isCardPayment ? "Paid from" : "Paid with",
+                        label: transaction.isMovement ? "From" : "Paid with",
                         accounts: accounts,
-                        cards: transaction.isCardPayment ? [] : cards,
-                        allowsNone: !transaction.isCardPayment,
+                        cards: transaction.isMovement ? [] : cards,
+                        allowsNone: !transaction.isMovement,
                         selection: $source
                     )
+
+                    if transaction.isTransfer {
+                        Picker("To", selection: $destinationID) {
+                            Text("Choose an account").tag(UUID?.none)
+                            ForEach(accounts.filter { account in
+                                PaymentSourceResolver.account(source, in: accounts)?.id != account.id
+                            }) { account in
+                                Label(account.name, systemImage: account.symbolName)
+                                    .tag(Optional(account.id))
+                            }
+                        }
+                    }
 
                     DateTimeRow(label: "Date & Time", selection: $date)
                 }
@@ -104,14 +126,21 @@ struct TransactionEditorView: View {
                         .lineLimit(2...5)
                 }
 
-                if transaction.isCardPayment, let card = transaction.creditCard {
+                if transaction.isMovement {
                     Section {
-                        Label("Bill payment to \(card.name)", systemImage: "creditcard")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
+                        Label(
+                            transaction.movementSummary ?? transaction.kind.title,
+                            systemImage: transaction.kind.symbolName
+                        )
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                     } footer: {
-                        Text("This clears card debt rather than being new spending, "
-                             + "so it stays out of the month\u{2019}s income and expense totals.")
+                        Text(transaction.isCardPayment
+                             ? "This clears card debt rather than being new spending, "
+                               + "so it stays out of the month\u{2019}s income and expense totals."
+                             : "This moves money between your own accounts, so it stays out of "
+                               + "the month\u{2019}s income and expense totals and leaves your "
+                               + "net worth unchanged.")
                     }
                 }
 
@@ -166,6 +195,7 @@ struct TransactionEditorView: View {
         type = transaction.type
         categoryID = transaction.category?.id
         source = transaction.paymentSource
+        destinationID = transaction.toAccount?.id
         date = transaction.date
         note = transaction.note
         amount = transaction.amount
@@ -177,16 +207,19 @@ struct TransactionEditorView: View {
         transaction.title = title.trimmingCharacters(in: .whitespacesAndNewlines)
         // Belt and braces alongside hiding the picker: a payment is an expense
         // on the account it leaves, whatever state the form was left in.
-        transaction.type = transaction.isCardPayment ? .expense : type
+        transaction.type = transaction.isMovement ? .expense : type
         transaction.amount = amount.roundedToCurrency
         transaction.date = date
         transaction.note = note
-        transaction.category = transaction.isCardPayment
+        transaction.category = transaction.isMovement
             ? nil
             : allCategories.first { $0.id == categoryID }
         if transaction.isCardPayment {
             // A bill payment's card is fixed; only the paying account can move.
             transaction.account = PaymentSourceResolver.account(source, in: accounts)
+        } else if transaction.isTransfer {
+            transaction.account = PaymentSourceResolver.account(source, in: accounts)
+            transaction.toAccount = accounts.first { $0.id == destinationID }
         } else {
             transaction.account = PaymentSourceResolver.account(source, in: accounts)
             transaction.creditCard = PaymentSourceResolver.card(source, in: cards)

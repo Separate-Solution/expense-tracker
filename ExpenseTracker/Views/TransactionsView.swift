@@ -30,7 +30,9 @@ struct TransactionsView: View {
     private var filtered: [Transaction] {
         transactions.filter { transaction in
             if let typeFilter, transaction.type != typeFilter { return false }
-            if let sourceFilter, transaction.paymentSource != sourceFilter { return false }
+            // A transfer belongs to both accounts it moves between, so
+            // filtering by either end should find it.
+            if let sourceFilter, !transaction.involves(sourceFilter) { return false }
             if let categoryFilter, transaction.category?.id != categoryFilter { return false }
             guard !searchText.isEmpty else { return true }
             let needle = searchText.lowercased()
@@ -39,6 +41,7 @@ struct TransactionsView: View {
                 || (transaction.category?.name.lowercased().contains(needle) ?? false)
                 || (transaction.account?.name.lowercased().contains(needle) ?? false)
                 || (transaction.creditCard?.name.lowercased().contains(needle) ?? false)
+                || (transaction.toAccount?.name.lowercased().contains(needle) ?? false)
         }
     }
 
@@ -57,16 +60,16 @@ struct TransactionsView: View {
             .sorted { $0.date > $1.date }
     }
 
-    /// Card bill payments are shown in the list but left out of every total:
-    /// they settle purchases that are already listed as spending, so counting
-    /// them again would double up.
+    /// Card bill payments and account transfers are shown in the list but left
+    /// out of every total: they move money you already have between places you
+    /// own, so counting them as spending would double up.
     private var filteredTotal: Decimal {
         Self.total(of: filtered)
     }
 
     /// How many rows on screen are excluded from the totals, so the figure can
     /// say why it doesn't match the rows above it.
-    private var excludedPaymentCount: Int {
+    private var excludedMovementCount: Int {
         filtered.filter { !$0.countsTowardsTotals }.count
     }
 
@@ -132,8 +135,8 @@ struct TransactionsView: View {
                                 Spacer()
                                 AmountText(amount: filteredTotal, font: .caption)
                             }
-                            if excludedPaymentCount > 0 {
-                                Text("Totals leave out \(excludedPaymentCount) card payment\(excludedPaymentCount == 1 ? "" : "s") \u{2014} the spending they settle is already listed.")
+                            if excludedMovementCount > 0 {
+                                Text("Totals leave out \(excludedMovementCount) transfer\(excludedMovementCount == 1 ? "" : "s") \u{2014} moving money between your own accounts and cards isn\u{2019}t spending.")
                                     .font(.caption2)
                                     .foregroundStyle(.secondary)
                             }
