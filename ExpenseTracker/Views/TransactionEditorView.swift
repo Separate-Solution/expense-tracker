@@ -27,6 +27,7 @@ struct TransactionEditorView: View {
 
     @State private var isShowingAmountPad = false
     @State private var isShowingDeleteConfirmation = false
+    @State private var saveFailure: Error?
 
     private var categories: [Category] {
         allCategories.filter { $0.type == type && !$0.isArchived }
@@ -214,11 +215,15 @@ struct TransactionEditorView: View {
                                 titleVisibility: .visible) {
                 Button("Delete", role: .destructive) {
                     context.delete(transaction)
-                    try? context.save()
+                    if let failure = context.saveReportingFailure() {
+                        saveFailure = failure
+                        return
+                    }
                     dismiss()
                 }
                 Button("Cancel", role: .cancel) { }
             }
+            .saveFailureAlert($saveFailure)
         }
         .onAppear(perform: load)
     }
@@ -263,7 +268,10 @@ struct TransactionEditorView: View {
         // transfer, or a destination left on anything else.
         transaction.normaliseMovement()
         transaction.updatedAt = Date()
-        try? context.save()
+        if let failure = context.saveReportingFailure() {
+            saveFailure = failure
+            return
+        }
         dismiss()
     }
 }

@@ -22,6 +22,7 @@ struct TransactionsView: View {
     @State private var pendingDeletion: Transaction?
     @State private var selectedIDs: Set<UUID> = []
     @State private var isConfirmingBulkDeletion = false
+    @State private var saveFailure: Error?
 
     private var hasActiveFilter: Bool {
         typeFilter != nil || sourceFilter != nil || categoryFilter != nil
@@ -226,7 +227,7 @@ struct TransactionsView: View {
                 Button("Delete", role: .destructive) {
                     if let pendingDeletion {
                         context.delete(pendingDeletion)
-                        try? context.save()
+                        saveFailure = context.saveReportingFailure()
                     }
                     pendingDeletion = nil
                 }
@@ -242,6 +243,7 @@ struct TransactionsView: View {
                 Button("Delete", role: .destructive, action: deleteSelected)
                 Button("Cancel", role: .cancel) { }
             }
+            .saveFailureAlert($saveFailure)
         }
     }
 
@@ -397,7 +399,10 @@ struct TransactionsView: View {
         for transaction in doomed {
             context.delete(transaction)
         }
-        try? context.save()
+        if let failure = context.saveReportingFailure() {
+            saveFailure = failure
+            return
+        }
         UINotificationFeedbackGenerator().notificationOccurred(.success)
         endSelection()
     }
@@ -410,7 +415,10 @@ struct TransactionsView: View {
         for original in originals {
             context.insert(original.duplicated())
         }
-        try? context.save()
+        if let failure = context.saveReportingFailure() {
+            saveFailure = failure
+            return
+        }
         UINotificationFeedbackGenerator().notificationOccurred(.success)
     }
 }

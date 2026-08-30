@@ -10,6 +10,7 @@ struct CategoriesView: View {
     @State private var editingCategory: Category?
     @State private var isCreating = false
     @State private var pendingDeletion: [Category] = []
+    @State private var saveFailure: Error?
 
     private var visible: [Category] {
         categories.filter { $0.type == type }
@@ -66,8 +67,7 @@ struct CategoriesView: View {
                             Label("Delete", systemImage: "trash")
                         }
                         Button {
-                            category.isArchived.toggle()
-                            try? context.save()
+                            toggleArchived(category)
                         } label: {
                             Label(category.isArchived ? "Show" : "Hide",
                                   systemImage: category.isArchived ? "eye" : "eye.slash")
@@ -106,13 +106,22 @@ struct CategoriesView: View {
                 for category in pendingDeletion {
                     context.delete(category)
                 }
-                try? context.save()
+                saveFailure = context.saveReportingFailure()
                 pendingDeletion = []
             }
             Button("Cancel", role: .cancel) { pendingDeletion = [] }
         } message: {
             Text("The transactions stay, but they become uncategorized. Hiding it instead keeps them labelled.")
         }
+        .saveFailureAlert($saveFailure)
+    }
+
+    /// Hides or shows a category. A rejected write rolls the row back, so the
+    /// list never shows a change the store didn't take.
+    /// - Parameter category: The category to toggle.
+    private func toggleArchived(_ category: Category) {
+        category.isArchived.toggle()
+        saveFailure = context.saveReportingFailure()
     }
 
     private var deletionPrompt: String {
@@ -143,7 +152,7 @@ struct CategoriesView: View {
         for (index, category) in reordered.enumerated() {
             category.sortIndex = index
         }
-        try? context.save()
+        saveFailure = context.saveReportingFailure()
     }
 }
 
@@ -164,6 +173,7 @@ struct CategoryEditorView: View {
     @State private var symbolName = CategoryIcon.expenseFallback
     @State private var colorHex = Theme.paletteHexes[0]
     @State private var type: TransactionType = .expense
+    @State private var saveFailure: Error?
 
     private var isNew: Bool { category == nil }
 
@@ -209,6 +219,7 @@ struct CategoryEditorView: View {
                     Button("Save", action: save).disabled(!canSave)
                 }
             }
+            .saveFailureAlert($saveFailure)
         }
         .onAppear(perform: load)
     }
@@ -238,7 +249,10 @@ struct CategoryEditorView: View {
             category.symbolName = symbolName
             category.colorHex = colorHex
             category.type = type
-            try? context.save()
+            if let failure = context.saveReportingFailure() {
+                saveFailure = failure
+                return
+            }
         } else {
             let created = Category(
                 name: trimmed,
@@ -248,7 +262,10 @@ struct CategoryEditorView: View {
                 sortIndex: (categories.filter { $0.type == type }.map(\.sortIndex).max() ?? -1) + 1
             )
             context.insert(created)
-            try? context.save()
+            if let failure = context.saveReportingFailure() {
+                saveFailure = failure
+                return
+            }
             onCreate?(created)
         }
         dismiss()

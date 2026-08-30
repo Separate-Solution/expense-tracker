@@ -21,6 +21,7 @@ struct CreditCardEditorView: View {
     @State private var colorHex = Theme.paletteHexes[0]
     @State private var note = ""
     @State private var editingAmount: AmountField?
+    @State private var saveFailure: Error?
 
     /// Which of the two money fields the calculator sheet is editing.
     private enum AmountField: String, Identifiable {
@@ -114,6 +115,7 @@ struct CreditCardEditorView: View {
                     Button("Save", action: save).disabled(!canSave)
                 }
             }
+            .saveFailureAlert($saveFailure)
             .sheet(item: $editingAmount) { field in
                 CardAmountSheet(
                     title: field.title,
@@ -199,7 +201,10 @@ struct CreditCardEditorView: View {
             )
             context.insert(created)
         }
-        try? context.save()
+        if let failure = context.saveReportingFailure() {
+            saveFailure = failure
+            return
+        }
         dismiss()
     }
 }

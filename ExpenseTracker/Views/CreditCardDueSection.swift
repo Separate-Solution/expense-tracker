@@ -149,6 +149,7 @@ struct CardPaymentSheet: View {
     @State private var amount: Decimal = .zero
     @State private var date = Date()
     @State private var isShowingAmountPad = false
+    @State private var saveFailure: Error?
 
     private var selectedAccount: Account? {
         accounts.first { $0.id == accountID }
@@ -230,6 +231,7 @@ struct CardPaymentSheet: View {
             .sheet(isPresented: $isShowingAmountPad) {
                 AmountEntrySheet(amount: $amount, type: .expense)
             }
+            .saveFailureAlert($saveFailure)
         }
         .presentationDetents([.medium, .large])
         .onAppear(perform: load)
@@ -261,13 +263,18 @@ struct CardPaymentSheet: View {
     /// Records the payment and closes the sheet.
     private func pay() {
         guard let selectedAccount else { return }
-        CardPaymentService.pay(
-            card: card,
-            from: selectedAccount,
-            amount: amount,
-            date: date,
-            in: context
-        )
+        do {
+            try CardPaymentService.pay(
+                card: card,
+                from: selectedAccount,
+                amount: amount,
+                date: date,
+                in: context
+            )
+        } catch {
+            saveFailure = error
+            return
+        }
         UINotificationFeedbackGenerator().notificationOccurred(.success)
         dismiss()
     }
