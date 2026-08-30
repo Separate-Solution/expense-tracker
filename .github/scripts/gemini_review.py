@@ -64,7 +64,7 @@ def get_diff(base_sha: str, head_sha: str, max_chars: int) -> str:
     # be told apart from a review that was handed nothing worth reading.
     files = run(
         "git", "diff", "-M", "--name-only", f"{base_sha}...{head_sha}", "--", ".", *EXCLUDED
-    ).split()
+    ).splitlines()
     print(f"Reviewing {len(diff)} chars across {len(files)} file(s):")
     for name in files:
         print(f"  {name}")
