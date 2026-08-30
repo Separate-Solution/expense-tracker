@@ -105,7 +105,8 @@ have used up.
   is on the Upcoming list, and the money hasn't moved yet.
 - Each row shows what has gone against the budget, what is left, how many days
   the period has to run, and a bar that turns red once an expense budget is
-  overspent. Archiving a budget keeps it and its history; deleting one leaves
+  overspent. Budgets are not in the backup file yet, so restoring a
+  backup — like erasing all data — clears them. Archiving a budget keeps it and its history; deleting one leaves
   every transaction untouched.
 
 **Recurring & subscriptions** — daily/weekly/monthly/yearly with an every-N
@@ -189,5 +190,5 @@ under `ExpenseTracker/` are picked up without touching the project file.
 - Minimum-due amounts, interest and late fees on cards — the bill is always the
   full statement balance.
 - Charts beyond the month's top-five breakdown; budget history for periods
-  that have already closed.
+  that have already closed; budgets in the backup file.
 - Automatic tracking / bank sync — deliberately out of scope.

@@ -291,6 +291,10 @@ enum BackupService {
 
         try context.delete(model: Transaction.self)
         try context.delete(model: RecurringRule.self)
+        // Budgets point at categories, accounts and cards, so they go before
+        // the things they point at — and before the restore, since a backup
+        // carries none of its own for them to be replaced by.
+        try context.delete(model: Budget.self)
         try context.delete(model: Category.self)
         try context.delete(model: CreditCard.self)
         try context.delete(model: Account.self)
@@ -446,6 +450,7 @@ enum BackupService {
         let phases: [(String, () throws -> Void)] = [
             ("transactions", { try context.delete(model: Transaction.self) }),
             ("rules", { try context.delete(model: RecurringRule.self) }),
+            ("budgets", { try context.delete(model: Budget.self) }),
             ("categories", { try context.delete(model: Category.self) }),
             ("cards", { try context.delete(model: CreditCard.self) }),
             ("accounts", { try context.delete(model: Account.self) })
