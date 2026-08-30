@@ -30,6 +30,9 @@ final class Account {
     @Relationship(deleteRule: .nullify, inverse: \RecurringRule.account)
     var recurringRules: [RecurringRule]? = []
 
+    /// Budgets narrowed to this account. A budget tied to none watches them all.
+    var budgets: [Budget]? = []
+
     /// Creates an account.
     /// - Parameters:
     ///   - id: Stable identifier; a fresh UUID unless restoring from a backup.
