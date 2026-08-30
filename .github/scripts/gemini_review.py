@@ -34,7 +34,14 @@ Rules:
 - Prefix each finding with a severity: **Critical**, **High**, **Medium**, **Low**.
 - Give the file and, where you can, the line.
 - Skip style nitpicks that a formatter would catch.
-- If you find nothing worth raising, reply with exactly: No issues found.
+
+Answer in exactly this shape:
+
+**Reviewed:** one line naming the files you examined and what you checked them for.
+
+Then the findings, most severe first. If a diff genuinely warrants none, write
+the single line `No issues found.` after the Reviewed line — but only once you
+have named what you checked, so a clean result can be judged on its reasoning.
 
 Diff:
 ```diff
@@ -52,7 +59,18 @@ def run(*args: str) -> str:
 
 def get_diff(base_sha: str, head_sha: str, max_chars: int) -> str:
     diff = run("git", "diff", "-M", f"{base_sha}...{head_sha}", "--", ".", *EXCLUDED)
+
+    # Log what the model is actually given, so a "No issues found" verdict can
+    # be told apart from a review that was handed nothing worth reading.
+    files = run(
+        "git", "diff", "-M", "--name-only", f"{base_sha}...{head_sha}", "--", ".", *EXCLUDED
+    ).split()
+    print(f"Reviewing {len(diff)} chars across {len(files)} file(s):")
+    for name in files:
+        print(f"  {name}")
+
     if len(diff) > max_chars:
+        print(f"Diff exceeds {max_chars} chars; truncating.")
         diff = diff[:max_chars] + "\n\n[diff truncated: PR exceeds the review size limit]"
     return diff
 
@@ -91,7 +109,7 @@ def main() -> None:
 
     models = [
         m.strip()
-        for m in os.environ.get("GEMINI_MODELS", "gemini-3.7-flash,gemini-3.6-flash").split(",")
+        for m in os.environ.get("GEMINI_MODELS", "gemini-3.6-flash,gemini-3.7-flash").split(",")
         if m.strip()
     ]
 
