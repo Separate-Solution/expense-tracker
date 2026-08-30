@@ -149,7 +149,7 @@ struct CardPaymentSheet: View {
     @State private var amount: Decimal = .zero
     @State private var date = Date()
     @State private var isShowingAmountPad = false
-    @State private var saveFailure: String?
+    @State private var saveFailure: Error?
 
     private var selectedAccount: Account? {
         accounts.first { $0.id == accountID }
@@ -272,7 +272,7 @@ struct CardPaymentSheet: View {
                 in: context
             )
         } catch {
-            saveFailure = error.localizedDescription
+            saveFailure = error
             return
         }
         UINotificationFeedbackGenerator().notificationOccurred(.success)

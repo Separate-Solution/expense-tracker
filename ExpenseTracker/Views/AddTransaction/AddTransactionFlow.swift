@@ -544,8 +544,7 @@ struct AddTransactionFlow: View {
                 RecurrenceEngine.skipOccurrences(for: rule)
             }
             if let failure = context.saveReportingFailure() {
-                context.delete(rule)
-                errorMessage = failure
+                errorMessage = failure.localizedDescription
                 return
             }
             RecurrenceEngine.postDueTransactions(in: context)
@@ -562,8 +561,7 @@ struct AddTransactionFlow: View {
             )
             context.insert(transaction)
             if let failure = context.saveReportingFailure() {
-                context.delete(transaction)
-                errorMessage = failure
+                errorMessage = failure.localizedDescription
                 return
             }
         }

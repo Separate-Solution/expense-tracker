@@ -27,7 +27,7 @@ struct TransactionEditorView: View {
 
     @State private var isShowingAmountPad = false
     @State private var isShowingDeleteConfirmation = false
-    @State private var saveFailure: String?
+    @State private var saveFailure: Error?
 
     private var categories: [Category] {
         allCategories.filter { $0.type == type && !$0.isArchived }

@@ -21,7 +21,7 @@ struct CreditCardEditorView: View {
     @State private var colorHex = Theme.paletteHexes[0]
     @State private var note = ""
     @State private var editingAmount: AmountField?
-    @State private var saveFailure: String?
+    @State private var saveFailure: Error?
 
     /// Which of the two money fields the calculator sheet is editing.
     private enum AmountField: String, Identifiable {

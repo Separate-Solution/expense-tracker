@@ -9,7 +9,7 @@ struct SubscriptionsView: View {
     @State private var editingRule: RecurringRule?
     @State private var isCreating = false
     @State private var pendingDeletion: RecurringRule?
-    @State private var saveFailure: String?
+    @State private var saveFailure: Error?
 
     private var activeRules: [RecurringRule] { rules.filter(\.isActive) }
     private var pausedRules: [RecurringRule] { rules.filter { !$0.isActive } }
@@ -142,7 +142,6 @@ struct SubscriptionsView: View {
             Button {
                 rule.isActive.toggle()
                 if let failure = context.saveReportingFailure() {
-                    rule.isActive.toggle()
                     saveFailure = failure
                 } else if rule.isActive {
                     RecurrenceEngine.postDueTransactions(in: context)
@@ -192,7 +191,7 @@ struct RecurringRuleEditorView: View {
     @State private var note = ""
     @State private var backfillPastOccurrences = true
     @State private var isShowingAmountPad = false
-    @State private var saveFailure: String?
+    @State private var saveFailure: Error?
 
     private var isNew: Bool { rule == nil }
 

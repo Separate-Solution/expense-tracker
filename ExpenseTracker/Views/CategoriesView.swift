@@ -10,7 +10,7 @@ struct CategoriesView: View {
     @State private var editingCategory: Category?
     @State private var isCreating = false
     @State private var pendingDeletion: [Category] = []
-    @State private var saveFailure: String?
+    @State private var saveFailure: Error?
 
     private var visible: [Category] {
         categories.filter { $0.type == type }
@@ -116,15 +116,12 @@ struct CategoriesView: View {
         .saveFailureAlert($saveFailure)
     }
 
-    /// Hides or shows a category, putting the row back if the write fails —
-    /// otherwise the list shows a change the store never took.
+    /// Hides or shows a category. A rejected write rolls the row back, so the
+    /// list never shows a change the store didn't take.
     /// - Parameter category: The category to toggle.
     private func toggleArchived(_ category: Category) {
         category.isArchived.toggle()
-        if let failure = context.saveReportingFailure() {
-            category.isArchived.toggle()
-            saveFailure = failure
-        }
+        saveFailure = context.saveReportingFailure()
     }
 
     private var deletionPrompt: String {
@@ -176,7 +173,7 @@ struct CategoryEditorView: View {
     @State private var symbolName = CategoryIcon.expenseFallback
     @State private var colorHex = Theme.paletteHexes[0]
     @State private var type: TransactionType = .expense
-    @State private var saveFailure: String?
+    @State private var saveFailure: Error?
 
     private var isNew: Bool { category == nil }
 
@@ -266,7 +263,6 @@ struct CategoryEditorView: View {
             )
             context.insert(created)
             if let failure = context.saveReportingFailure() {
-                context.delete(created)
                 saveFailure = failure
                 return
             }

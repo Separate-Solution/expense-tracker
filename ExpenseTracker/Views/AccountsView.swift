@@ -17,7 +17,7 @@ struct AccountsView: View {
     @State private var transferSource: Account?
     @State private var pendingAccountDeletion: Account?
     @State private var pendingCardDeletion: CreditCard?
-    @State private var saveFailure: String?
+    @State private var saveFailure: Error?
 
     private var activeAccounts: [Account] { accounts.filter { !$0.isArchived } }
     private var archivedAccounts: [Account] { accounts.filter(\.isArchived) }
@@ -356,7 +356,7 @@ struct AccountEditorView: View {
     @State private var openingBalance: Decimal = .zero
     @State private var note = ""
     @State private var isShowingAmountPad = false
-    @State private var saveFailure: String?
+    @State private var saveFailure: Error?
 
     private var isNew: Bool { account == nil }
 
