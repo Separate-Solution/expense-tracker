@@ -33,6 +33,8 @@ struct DataManagementView: View {
     /// It carries its own copy of the plan because `sheet(item:)` clears
     /// `pendingCSV` before `onDismiss` runs.
     @State private var confirmedImport: ConfirmedImport?
+    /// Non-nil while a long data task runs; drives the determinate overlay.
+    @State private var progress: TaskProgress?
 
     struct ConfirmedImport {
         let plan: CSVImportPlan
@@ -42,7 +44,6 @@ struct DataManagementView: View {
     @State private var statusTitle = ""
     @State private var statusMessage = ""
     @State private var isShowingStatus = false
-    @State private var isWorking = false
 
     var body: some View {
         List {
@@ -123,10 +124,11 @@ struct DataManagementView: View {
         .navigationTitle("Data")
         .navigationBarTitleDisplayMode(.inline)
         .overlay {
-            if isWorking {
-                ProgressView().controlSize(.large)
+            if let progress {
+                TaskProgressOverlay(progress: progress)
             }
         }
+        .animation(.easeInOut(duration: 0.2), value: progress == nil)
         .sheet(item: $exportedFile) { file in
             ShareSheet(url: file.url)
         }
@@ -160,23 +162,28 @@ struct DataManagementView: View {
 
     /// Writes every transaction to a timestamped CSV and opens the share sheet.
     private func exportCSV() {
-        do {
-            let csv = CSVService.exportString(transactions: transactions)
+        run("Writing CSV") { report in
+            let csv = await CSVService.exportString(transactions: transactions, onProgress: report)
             let name = ExportFileWriter.timestampedName(prefix: "expenses", extension: "csv")
             exportedFile = try ExportFileWriter.write(csv, named: name)
-        } catch {
+        } onFailure: { error in
             showStatus("Export failed", error.localizedDescription)
         }
     }
 
     /// Writes a full JSON backup to a timestamped file and opens the share sheet.
     private func exportBackup() {
-        do {
+        run("Writing backup") { report in
+            // Two whole-file steps rather than a per-row count that would be
+            // invented: the snapshot, then encoding it.
             let payload = try BackupService.makePayload(from: context)
+            report(0.5)
+            await Task.yield()
             let data = try BackupService.encode(payload)
             let name = ExportFileWriter.timestampedName(prefix: "expense-tracker-backup", extension: "json")
             exportedFile = try ExportFileWriter.write(data, named: name)
-        } catch {
+            report(1)
+        } onFailure: { error in
             showStatus("Backup failed", error.localizedDescription)
         }
     }
@@ -192,8 +199,8 @@ struct DataManagementView: View {
             showStatus("Import failed", error.localizedDescription)
         case .success(let urls):
             guard let url = urls.first else { return }
-            isWorking = true
-            defer { isWorking = false }
+            progress = TaskProgress(label: "Reading file")
+            defer { progress = nil }
             do {
                 let text = try readSecurityScoped(url) { try String(contentsOf: $0, encoding: .utf8) }
                 confirmedImport = nil
@@ -208,21 +215,20 @@ struct DataManagementView: View {
     private func runConfirmedImport() {
         guard let confirmed = confirmedImport else { return }
         confirmedImport = nil
-        isWorking = true
-        defer { isWorking = false }
-        do {
+        run("Importing transactions") { report in
             let defaultAccount = try context.fetch(FetchDescriptor<Account>())
                 .filter { !$0.isArchived }
                 .sorted { $0.sortIndex < $1.sortIndex }
                 .first
-            let summary = try CSVService.commit(
+            let summary = try await CSVService.commit(
                 confirmed.plan,
                 mapping: confirmed.mapping,
                 into: context,
-                defaultAccount: defaultAccount
+                defaultAccount: defaultAccount,
+                onProgress: report
             )
             showStatus("Import finished", describe(summary))
-        } catch {
+        } onFailure: { error in
             showStatus("Import failed", error.localizedDescription)
         }
     }
@@ -284,32 +290,60 @@ struct DataManagementView: View {
     /// Replaces all current data with the confirmed backup and reports what
     /// came back.
     private func performRestore() {
-        guard let pendingRestore else { return }
-        isWorking = true
-        defer {
-            isWorking = false
-            self.pendingRestore = nil
-        }
-        do {
-            let summary = try BackupService.restore(pendingRestore, into: context)
+        guard let payload = pendingRestore else { return }
+        pendingRestore = nil
+        run("Restoring backup") { report in
+            let summary = try await BackupService.restore(
+                payload,
+                into: context,
+                onProgress: report
+            )
             showStatus(
                 "Restored",
                 "\(summary.transactions) transactions, \(summary.accounts) accounts, "
                 + "\(summary.creditCards) credit cards, \(summary.categories) categories "
                 + "and \(summary.recurringRules) recurring rules are back."
             )
-        } catch {
+        } onFailure: { error in
             showStatus("Restore failed", error.localizedDescription)
         }
     }
 
     /// Deletes everything and reseeds the default categories.
     private func eraseAll() {
-        do {
-            try BackupService.eraseAll(in: context, reseed: true)
+        run("Erasing everything") { report in
+            try await BackupService.eraseAll(in: context, reseed: true, onProgress: report)
             showStatus("Erased", "Everything is gone and the default categories are back.")
-        } catch {
+        } onFailure: { error in
             showStatus("Couldn't erase", error.localizedDescription)
+        }
+    }
+
+    /// Runs one long data task behind the determinate overlay.
+    ///
+    /// The work stays on the main actor — SwiftData's context can't leave it —
+    /// so the overlay only moves because the task yields between chunks. The
+    /// label is set before the first chunk so the sheet never shows an empty
+    /// ring.
+    /// - Parameters:
+    ///   - label: What to show under the ring.
+    ///   - work: The task, handed a closure to report its progress with.
+    ///   - onFailure: Shown if the task throws.
+    private func run(
+        _ label: String,
+        work: @escaping (@escaping (Double) -> Void) async throws -> Void,
+        onFailure: @escaping (Error) -> Void
+    ) {
+        progress = TaskProgress(label: label)
+        Task {
+            defer { progress = nil }
+            do {
+                try await work { fraction in
+                    progress?.advance(to: fraction)
+                }
+            } catch {
+                onFailure(error)
+            }
         }
     }
 
