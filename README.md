@@ -35,6 +35,14 @@ browsed sit underneath it, labelled with which month that is.
 and a running balance. Accounts can be archived (keeps history) or deleted
 (removes their transactions, with a confirmation that tells you how many).
 
+**Transfers** — moving money between two of your own accounts, from the **+**
+menu on Accounts or by swiping an account row right. Pick both ends and an
+amount; the sheet shows what each balance becomes before you commit, and warns
+when the source would go overdrawn. It is written as one transaction that debits
+one account and credits the other, marked as a transfer so it stays out of income
+and spending and leaves your net worth untouched — nothing was earned or spent,
+the money is just somewhere else. Filtering by either account finds it.
+
 **Credit cards** — their own section beside bank accounts, because credit works
 the other way round: you spend borrowed money and settle up later. A card has a
 name, a credit limit, the day its statement closes and the day the bill is due.
@@ -87,7 +95,8 @@ history it already created.
 **Transactions** — grouped by day with per-day totals, searchable across title,
 note, category, account and card, and filterable by type, payment source and
 category. Future-dated entries are marked **Upcoming** and kept out of the
-month's spend. Bill payments carry a transfer marker, name the card they settle,
+month's spend. Transfers and bill payments carry a transfer marker, name both
+ends ("Cash → icici bank"),
 and are shown in a neutral colour and left out of the list's totals — the
 spending they settle is already listed, so counting them again would double up.
 The header says how many rows were left out whenever any are.
@@ -95,7 +104,7 @@ The header says how many rows were left out whenever any are.
 **Data** (Settings → Import, Export & Backup)
 
 - *CSV export* — `Date, Time, Title, Type, Amount, Currency, Account,
-  Account Type, Credit Card, Category, Note, ID`, RFC 4180 quoted.
+  Account Type, Credit Card, Transfer To, Category, Note, ID`, RFC 4180 quoted.
 - *CSV import* — only `Date` and `Amount` are required. Accounts and categories
   named in the file are created if missing (account type is guessed from the name
   when the column is absent), rows whose `ID` already exists are skipped so
@@ -103,12 +112,16 @@ The header says how many rows were left out whenever any are.
   rather than failing the whole file. A `Credit Card` column charges the row to
   that card, creating it with no limit if it is new; a row naming both an account
   and a card is read as a bill payment, which is how an export round-trips. A row
+  naming a `Transfer To` account is read as a transfer out of its `Account`. A row
   from an older export, whose `Account Type` is `credit` and which has no
-  `Credit Card` column, comes in as a card rather than a bank account. Handles `1,234.56`, `₹1,234`, `(45.00)` and
+  `Credit Card` column, comes in as a card rather than a bank account. Opening
+  balances are not in a CSV, so a re-import into an empty app reproduces the
+  movements but not the balances they started from — use a backup for that. Handles `1,234.56`, `₹1,234`, `(45.00)` and
   a leading `-`; a negative amount means an expense when there's no `Type` column.
 - *Backup / restore* — one JSON file with accounts, credit cards, categories,
   recurring rules and transactions, relationships included. Backups written by
-  older versions still restore; everything credit cards added is optional. Restore replaces everything after a
+  older versions still restore. The format is at version 4; a file from a newer
+  build is declined rather than read with pieces missing. Restore replaces everything after a
   confirmation that tells you what's in the file.
 - *Erase all data* — wipes everything and puts the default categories back.
 
@@ -126,7 +139,7 @@ ExpenseTracker/
   App/         app entry and the model container
   Models/      Account, CreditCard, Category, Transaction, RecurringRule (SwiftData)
   Services/    CalculatorEngine, RecurrenceEngine, BillingCycle, CardPaymentService,
-               CSVService, BackupService, SeedData
+               TransferService, CSVService, BackupService, SeedData
   Theme/       palette, card style, currency and date formatting
   Views/       one file per screen, plus AddTransaction/ and Components/
 Config/
@@ -138,10 +151,6 @@ under `ExpenseTracker/` are picked up without touching the project file.
 
 ## Not built yet
 
-- **Transfers between bank accounts.** Moving money between two of your own
-  accounts still has to be logged as an expense on one and income on the other,
-  which inflates both totals for the month. Credit card bill payments already
-  work this way properly; ordinary transfers should follow.
 - Minimum-due amounts, interest and late fees on cards — the bill is always the
   full statement balance.
 - Budgets, per-category limits, charts beyond the month's top-five breakdown.

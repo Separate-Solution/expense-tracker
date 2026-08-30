@@ -13,6 +13,8 @@ struct AccountsView: View {
     @State private var editingCard: CreditCard?
     @State private var isCreatingAccount = false
     @State private var isCreatingCard = false
+    @State private var isTransferring = false
+    @State private var transferSource: Account?
     @State private var pendingAccountDeletion: Account?
     @State private var pendingCardDeletion: CreditCard?
     @State private var saveFailure: String?
@@ -80,6 +82,17 @@ struct AccountsView: View {
                                 Label("Archive", systemImage: "archivebox")
                             }
                             .tint(.orange)
+                        }
+                        .swipeActions(edge: .leading) {
+                            if activeAccounts.count >= 2 {
+                                Button {
+                                    transferSource = account
+                                    isTransferring = true
+                                } label: {
+                                    Label("Transfer", systemImage: "arrow.left.arrow.right")
+                                }
+                                .tint(.accentColor)
+                            }
                         }
                     }
                 }
@@ -156,6 +169,13 @@ struct AccountsView: View {
                         Button("New Credit Card", systemImage: "creditcard") {
                             isCreatingCard = true
                         }
+                        if activeAccounts.count >= 2 {
+                            Divider()
+                            Button("Transfer Money", systemImage: "arrow.left.arrow.right") {
+                                transferSource = nil
+                                isTransferring = true
+                            }
+                        }
                     } label: {
                         Image(systemName: "plus")
                     }
@@ -166,6 +186,9 @@ struct AccountsView: View {
             }
             .sheet(isPresented: $isCreatingCard) {
                 CreditCardEditorView(card: nil)
+            }
+            .sheet(isPresented: $isTransferring) {
+                TransferSheet(initialSource: transferSource)
             }
             .sheet(item: $editingAccount) { account in
                 AccountEditorView(account: account)
@@ -217,7 +240,9 @@ struct AccountsView: View {
 
     private var accountDeletionPrompt: String {
         guard let pendingAccountDeletion else { return "Delete account?" }
-        let count = pendingAccountDeletion.transactions?.count ?? 0
+        // Transfers that landed here go too, and they live on the other
+        // account's list, so the plain transactions count would understate it.
+        let count = pendingAccountDeletion.allTransactionCount
         return count == 0
             ? "Delete \u{201C}\(pendingAccountDeletion.name)\u{201D}?"
             : "Delete \u{201C}\(pendingAccountDeletion.name)\u{201D} and its \(count) transaction\(count == 1 ? "" : "s")?"

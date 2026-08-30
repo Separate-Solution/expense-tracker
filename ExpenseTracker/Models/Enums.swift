@@ -126,6 +126,9 @@ enum RecurrenceFrequency: String, Codable, CaseIterable, Identifiable {
 enum TransactionKind: String, Codable, CaseIterable, Identifiable {
     case standard
     case cardPayment
+    /// Money moved between two of your own accounts. Like a card payment it is
+    /// not spending — nothing left your pocket, it just sits somewhere else.
+    case transfer
 
     var id: String { rawValue }
 
@@ -134,19 +137,21 @@ enum TransactionKind: String, Codable, CaseIterable, Identifiable {
         switch self {
         case .standard: return "Transaction"
         case .cardPayment: return "Card Payment"
+        case .transfer: return "Transfer"
         }
     }
 
-    /// SF Symbol marking the row as a transfer rather than spending.
-    var symbolName: String {
-        switch self {
-        case .standard: return "arrow.left.arrow.right"
-        case .cardPayment: return "arrow.left.arrow.right"
-        }
-    }
+    /// SF Symbol marking the row as a movement rather than spending.
+    var symbolName: String { "arrow.left.arrow.right" }
 
-    /// Whether this kind counts towards income and spending totals.
+    /// Whether this kind counts towards income and spending totals. Only real
+    /// spending and income do; the two movement kinds are between your own
+    /// pockets, and counting them would double up money already recorded.
     var countsTowardsTotals: Bool { self == .standard }
+
+    /// Whether this kind moves money between two places you own, so it needs
+    /// both ends set and is barred from carrying a category.
+    var isMovement: Bool { self != .standard }
 }
 
 /// Where a transaction's money came from — a bank account or a credit card.

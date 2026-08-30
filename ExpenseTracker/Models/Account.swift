@@ -20,6 +20,13 @@ final class Account {
     @Relationship(deleteRule: .cascade, inverse: \Transaction.account)
     var transactions: [Transaction]? = []
 
+    /// Transfers landing in this account. They live on the *other* account's
+    /// `transactions` as the outgoing side, so they only reach this one here.
+    /// Deleting an account removes them, same as its own transactions — the UI
+    /// counts both before warning.
+    @Relationship(deleteRule: .cascade, inverse: \Transaction.toAccount)
+    var incomingTransfers: [Transaction]? = []
+
     @Relationship(deleteRule: .nullify, inverse: \RecurringRule.account)
     var recurringRules: [RecurringRule]? = []
 
@@ -63,16 +70,40 @@ final class Account {
         set { kindRaw = newValue.rawValue }
     }
 
-    /// Opening balance plus every posted transaction. Expenses subtract, income adds.
+    /// Opening balance plus every posted transaction. Expenses subtract, income
+    /// adds, and money transferred in from another account adds on top — the
+    /// outgoing side of that transfer belongs to the account it left.
     var currentBalance: Decimal {
-        (transactions ?? []).reduce(openingBalance) { $0 + $1.signedAmount }
+        let ownMovements = (transactions ?? []).reduce(openingBalance) { $0 + $1.signedAmount }
+        // Only a real transfer credits this account. Anything else pointing here
+        // is malformed, and counting it would be money from nowhere.
+        return (incomingTransfers ?? [])
+            .filter(\.isTransfer)
+            .reduce(ownMovements) { $0 + abs($1.amount) }
     }
 
     /// Balance counting only transactions dated today or earlier.
     var clearedBalance: Decimal {
-        let cutoff = Date.now.endOfDay
-        return (transactions ?? [])
+        balance(asOf: .now)
+    }
+
+    /// The balance as it stood at the end of `date`, ignoring anything dated
+    /// later, so a scheduled transaction doesn't count before it happens.
+    /// - Parameter date: The day to settle the balance at.
+    /// - Returns: The balance on that day.
+    func balance(asOf date: Date) -> Decimal {
+        let cutoff = date.endOfDay
+        let ownMovements = (transactions ?? [])
             .filter { $0.date <= cutoff }
             .reduce(openingBalance) { $0 + $1.signedAmount }
+        return (incomingTransfers ?? [])
+            .filter { $0.isTransfer && $0.date <= cutoff }
+            .reduce(ownMovements) { $0 + abs($1.amount) }
+    }
+
+    /// Everything deletion would take with it: this account's own rows plus the
+    /// transfers that landed in it from elsewhere.
+    var allTransactionCount: Int {
+        (transactions?.count ?? 0) + (incomingTransfers?.filter(\.isTransfer).count ?? 0)
     }
 }

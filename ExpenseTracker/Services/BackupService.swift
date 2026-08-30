@@ -10,7 +10,11 @@ struct BackupPayload: Codable {
     ///
     /// 3 added credit cards, along with the card link and kind on transactions.
     /// Everything it adds is optional, so a version 2 backup still restores.
-    static let currentFormatVersion = 3
+    ///
+    /// 4 added the transfer destination on transactions. A version 3 build
+    /// reading one would drop the destination and leave a transfer looking like
+    /// a plain expense, so the bump makes it decline the file instead.
+    static let currentFormatVersion = 4
 
     var formatVersion: Int = BackupPayload.currentFormatVersion
     var exportedAt: Date = Date()
@@ -98,6 +102,8 @@ struct BackupPayload: Codable {
         var accountID: UUID?
         /// Absent in backups written before credit cards existed.
         var creditCardID: UUID?
+        /// The far side of a transfer; absent before transfers existed.
+        var toAccountID: UUID?
         var categoryID: UUID?
         var recurringRuleID: UUID?
     }
@@ -218,6 +224,7 @@ enum BackupService {
                 kind: transaction.kindRaw,
                 accountID: transaction.account?.id,
                 creditCardID: transaction.creditCard?.id,
+                toAccountID: transaction.toAccount?.id,
                 categoryID: transaction.category?.id,
                 recurringRuleID: transaction.recurringRule?.id
             )
@@ -357,11 +364,16 @@ enum BackupService {
                 kind: dto.kind.flatMap { TransactionKind(rawValue: $0) } ?? .standard,
                 account: dto.accountID.flatMap { accountsByID[$0] },
                 creditCard: dto.creditCardID.flatMap { cardsByID[$0] },
+                toAccount: dto.toAccountID.flatMap { accountsByID[$0] },
                 category: dto.categoryID.flatMap { categoriesByID[$0] },
                 recurringRule: dto.recurringRuleID.flatMap { rulesByID[$0] },
                 createdAt: dto.createdAt
             )
             transaction.updatedAt = dto.updatedAt
+            // The file is the one input nothing in the app validated on the way
+            // in, so the movement invariants are enforced here rather than
+            // trusted.
+            transaction.normaliseMovement()
             context.insert(transaction)
         }
 
