@@ -10,6 +10,9 @@ struct ExpenseTrackerApp: App {
 
     /// Builds the SwiftData container for the six persisted models.
     /// A store that cannot be opened is treated as fatal at launch.
+    ///
+    /// A model added here also has to reach `BackupService.wipeSteps`, or it
+    /// will survive erasing all data and restoring a backup.
     init() {
         let schema = Schema([
             Account.self, CreditCard.self, Category.self, Transaction.self, RecurringRule.self,

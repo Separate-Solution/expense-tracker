@@ -289,15 +289,10 @@ enum BackupService {
             }
         }
 
-        try context.delete(model: Transaction.self)
-        try context.delete(model: RecurringRule.self)
-        // Budgets point at categories, accounts and cards, so they go before
-        // the things they point at — and before the restore, since a backup
-        // carries none of its own for them to be replaced by.
-        try context.delete(model: Budget.self)
-        try context.delete(model: Category.self)
-        try context.delete(model: CreditCard.self)
-        try context.delete(model: Account.self)
+        // Budgets are cleared with everything else even though a backup carries
+        // none of its own — restoring replaces all current data, and leaving
+        // them would attach the old ones to whatever came in.
+        try await deleteAllRecords(in: context)
         try context.save()
 
         var accountsByID: [UUID: Account] = [:]
@@ -434,6 +429,45 @@ enum BackupService {
         )
     }
 
+    // MARK: - Wiping
+
+    /// Every model in the store, in the order a wipe has to clear them: rows
+    /// before the things they point at.
+    ///
+    /// One list, because both paths that empty the store — erasing and
+    /// restoring — need exactly the same one. They each had their own before,
+    /// and budgets were added to the schema without reaching either, so they
+    /// outlived a wipe that said everything was gone. A model added to the
+    /// schema belongs here too.
+    private static let wipeSteps: [(ModelContext) throws -> Void] = [
+        { try $0.delete(model: Transaction.self) },
+        { try $0.delete(model: RecurringRule.self) },
+        { try $0.delete(model: Budget.self) },
+        { try $0.delete(model: Category.self) },
+        { try $0.delete(model: CreditCard.self) },
+        { try $0.delete(model: Account.self) }
+    ]
+
+    /// How many steps a wipe runs through, for pacing a progress bar.
+    static var wipeStepCount: Int { wipeSteps.count }
+
+    /// Deletes every record in the store, leaving the changes unsaved so the
+    /// caller can save once, alongside whatever it does next.
+    /// - Parameters:
+    ///   - context: The store to empty.
+    ///   - onStepComplete: Called after each model is cleared.
+    /// - Throws: Any delete error from the context.
+    @MainActor
+    static func deleteAllRecords(
+        in context: ModelContext,
+        onStepComplete: () async -> Void = {}
+    ) async throws {
+        for step in wipeSteps {
+            try step(context)
+            await onStepComplete()
+        }
+    }
+
     /// Removes every record but keeps the default categories, for a clean slate.
     /// - Parameters:
     ///   - context: The store to wipe.
@@ -445,21 +479,12 @@ enum BackupService {
         reseed: Bool,
         onProgress: ((Double) -> Void)? = nil
     ) async throws {
-        // Nothing here is per-row, so the bar tracks the phases instead. They
-        // run in dependency order: rows before the things they point at.
-        let phases: [(String, () throws -> Void)] = [
-            ("transactions", { try context.delete(model: Transaction.self) }),
-            ("rules", { try context.delete(model: RecurringRule.self) }),
-            ("budgets", { try context.delete(model: Budget.self) }),
-            ("categories", { try context.delete(model: Category.self) }),
-            ("cards", { try context.delete(model: CreditCard.self) }),
-            ("accounts", { try context.delete(model: Account.self) })
-        ]
-        let steps = Double(phases.count + (reseed ? 2 : 1))
+        // Nothing here is per-row, so the bar tracks the steps of the wipe
+        // instead, plus the save and the reseed.
+        let steps = Double(wipeStepCount + (reseed ? 2 : 1))
         var done = 0.0
 
-        for (_, run) in phases {
-            try run()
+        try await deleteAllRecords(in: context) {
             done += 1
             onProgress?(done / steps)
             await Task.yield()
