@@ -189,8 +189,18 @@ struct RecurringRuleEditorView: View {
 
     private var isNew: Bool { rule == nil }
 
+    /// Categories of the current type, plus the one this rule already uses.
+    ///
+    /// Hiding an archived category from the picker leaves its row blank when a
+    /// rule still points at one. The category itself survives a save — that
+    /// resolves against every category, not this list — but a blank row reads
+    /// like the rule has lost it.
     private var categories: [Category] {
-        allCategories.filter { $0.type == type && !$0.isArchived }
+        let visible = allCategories.filter { $0.type == type && !$0.isArchived }
+        guard let current = rule?.category,
+              current.type == type,
+              !visible.contains(where: { $0.id == current.id }) else { return visible }
+        return (visible + [current]).sorted { $0.sortIndex < $1.sortIndex }
     }
 
     /// The unarchived accounts, plus the one this rule already posts into.
