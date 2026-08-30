@@ -98,7 +98,7 @@ struct DataManagementView: View {
             } header: {
                 Text("Backup")
             } footer: {
-                Text("A backup contains everything — accounts, credit cards, categories, recurring rules and transactions. Restoring replaces all current data.")
+                Text("A backup contains everything — accounts, credit cards, categories, recurring rules and transactions. Restoring replaces all current data. Budgets aren't in a backup yet, so restoring clears them.")
             }
 
             Section {
@@ -118,7 +118,7 @@ struct DataManagementView: View {
                     Text("This can't be undone. Make a backup first if you're not sure.")
                 }
             } footer: {
-                Text("Removes every account, credit card, category, rule and transaction, then restores the default categories.")
+                Text("Removes every account, credit card, category, rule, budget and transaction, then restores the default categories.")
             }
         }
         .navigationTitle("Data")
