@@ -15,6 +15,8 @@ enum CardPaymentService {
     ///   - date: When the payment happened; defaults to now.
     ///   - context: Context to insert into. The caller does not need to save.
     /// - Returns: The inserted transaction, or nil for a non-positive amount.
+    /// - Throws: Any error from saving, so a failed payment isn't reported as
+    ///   a success by the sheet that asked for it.
     @discardableResult
     static func pay(
         card: CreditCard,
@@ -22,7 +24,7 @@ enum CardPaymentService {
         amount: Decimal,
         date: Date = .now,
         in context: ModelContext
-    ) -> Transaction? {
+    ) throws -> Transaction? {
         let value = abs(amount).roundedToCurrency
         guard value > 0 else { return nil }
 
@@ -39,7 +41,14 @@ enum CardPaymentService {
             category: nil
         )
         context.insert(payment)
-        try? context.save()
+        do {
+            try context.save()
+        } catch {
+            // Take the half-made payment back out, or the next successful save
+            // anywhere in the app would commit one the user was told had failed.
+            context.delete(payment)
+            throw error
+        }
         return payment
     }
 
@@ -51,13 +60,14 @@ enum CardPaymentService {
     ///   - date: When the payment happened; defaults to now.
     ///   - context: Context to insert into.
     /// - Returns: The inserted transaction, or nil when nothing is due.
+    /// - Throws: Any error from saving.
     @discardableResult
     static func payFullBill(
         card: CreditCard,
         from account: Account,
         date: Date = .now,
         in context: ModelContext
-    ) -> Transaction? {
-        pay(card: card, from: account, amount: card.amountDue(asOf: date), date: date, in: context)
+    ) throws -> Transaction? {
+        try pay(card: card, from: account, amount: card.amountDue(asOf: date), date: date, in: context)
     }
 }

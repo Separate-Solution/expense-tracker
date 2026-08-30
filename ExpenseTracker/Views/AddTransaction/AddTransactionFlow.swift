@@ -543,7 +543,11 @@ struct AddTransactionFlow: View {
             if !backfillPastOccurrences && date < Date.now.startOfDay {
                 RecurrenceEngine.skipOccurrences(for: rule)
             }
-            try? context.save()
+            if let failure = context.saveReportingFailure() {
+                context.delete(rule)
+                errorMessage = failure
+                return
+            }
             RecurrenceEngine.postDueTransactions(in: context)
         } else {
             let transaction = Transaction(
@@ -557,7 +561,11 @@ struct AddTransactionFlow: View {
                 category: selectedCategory
             )
             context.insert(transaction)
-            try? context.save()
+            if let failure = context.saveReportingFailure() {
+                context.delete(transaction)
+                errorMessage = failure
+                return
+            }
         }
 
         if source != nil {

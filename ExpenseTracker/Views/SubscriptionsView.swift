@@ -9,6 +9,7 @@ struct SubscriptionsView: View {
     @State private var editingRule: RecurringRule?
     @State private var isCreating = false
     @State private var pendingDeletion: RecurringRule?
+    @State private var saveFailure: String?
 
     private var activeRules: [RecurringRule] { rules.filter(\.isActive) }
     private var pausedRules: [RecurringRule] { rules.filter { !$0.isActive } }
@@ -96,7 +97,7 @@ struct SubscriptionsView: View {
             Button("Delete rule, keep history", role: .destructive) {
                 if let pendingDeletion {
                     context.delete(pendingDeletion)
-                    try? context.save()
+                    saveFailure = context.saveReportingFailure()
                 }
                 pendingDeletion = nil
             }
@@ -104,6 +105,7 @@ struct SubscriptionsView: View {
         } message: {
             Text("Transactions it already created stay in your history.")
         }
+        .saveFailureAlert($saveFailure)
     }
 
     /// Builds one row of the subscriptions list, with its swipe actions.
@@ -139,8 +141,12 @@ struct SubscriptionsView: View {
             }
             Button {
                 rule.isActive.toggle()
-                try? context.save()
-                if rule.isActive { RecurrenceEngine.postDueTransactions(in: context) }
+                if let failure = context.saveReportingFailure() {
+                    rule.isActive.toggle()
+                    saveFailure = failure
+                } else if rule.isActive {
+                    RecurrenceEngine.postDueTransactions(in: context)
+                }
             } label: {
                 Label(rule.isActive ? "Pause" : "Resume",
                       systemImage: rule.isActive ? "pause" : "play")
@@ -186,6 +192,7 @@ struct RecurringRuleEditorView: View {
     @State private var note = ""
     @State private var backfillPastOccurrences = true
     @State private var isShowingAmountPad = false
+    @State private var saveFailure: String?
 
     private var isNew: Bool { rule == nil }
 
@@ -278,6 +285,7 @@ struct RecurringRuleEditorView: View {
                     Button("Save", action: save).disabled(!canSave)
                 }
             }
+            .saveFailureAlert($saveFailure)
             .sheet(isPresented: $isShowingAmountPad) {
                 AmountEntrySheet(amount: $amount, type: type)
             }
@@ -347,7 +355,10 @@ struct RecurringRuleEditorView: View {
             }
         }
 
-        try? context.save()
+        if let failure = context.saveReportingFailure() {
+            saveFailure = failure
+            return
+        }
         RecurrenceEngine.postDueTransactions(in: context)
         dismiss()
     }

@@ -22,6 +22,7 @@ struct TransactionsView: View {
     @State private var pendingDeletion: Transaction?
     @State private var selectedIDs: Set<UUID> = []
     @State private var isConfirmingBulkDeletion = false
+    @State private var saveFailure: String?
 
     private var hasActiveFilter: Bool {
         typeFilter != nil || sourceFilter != nil || categoryFilter != nil
@@ -223,7 +224,7 @@ struct TransactionsView: View {
                 Button("Delete", role: .destructive) {
                     if let pendingDeletion {
                         context.delete(pendingDeletion)
-                        try? context.save()
+                        saveFailure = context.saveReportingFailure()
                     }
                     pendingDeletion = nil
                 }
@@ -239,6 +240,7 @@ struct TransactionsView: View {
                 Button("Delete", role: .destructive, action: deleteSelected)
                 Button("Cancel", role: .cancel) { }
             }
+            .saveFailureAlert($saveFailure)
         }
     }
 
@@ -394,7 +396,10 @@ struct TransactionsView: View {
         for transaction in doomed {
             context.delete(transaction)
         }
-        try? context.save()
+        if let failure = context.saveReportingFailure() {
+            saveFailure = failure
+            return
+        }
         UINotificationFeedbackGenerator().notificationOccurred(.success)
         endSelection()
     }
@@ -404,10 +409,17 @@ struct TransactionsView: View {
     /// - Parameter originals: The transactions to copy.
     private func duplicate(_ originals: [Transaction]) {
         guard !originals.isEmpty else { return }
+        var copies: [Transaction] = []
         for original in originals {
-            context.insert(original.duplicated())
+            let copy = original.duplicated()
+            context.insert(copy)
+            copies.append(copy)
         }
-        try? context.save()
+        if let failure = context.saveReportingFailure() {
+            copies.forEach { context.delete($0) }
+            saveFailure = failure
+            return
+        }
         UINotificationFeedbackGenerator().notificationOccurred(.success)
     }
 }

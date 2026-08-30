@@ -15,6 +15,7 @@ struct AccountsView: View {
     @State private var isCreatingCard = false
     @State private var pendingAccountDeletion: Account?
     @State private var pendingCardDeletion: CreditCard?
+    @State private var saveFailure: String?
 
     private var activeAccounts: [Account] { accounts.filter { !$0.isArchived } }
     private var archivedAccounts: [Account] { accounts.filter(\.isArchived) }
@@ -74,7 +75,7 @@ struct AccountsView: View {
                             }
                             Button {
                                 account.isArchived = true
-                                try? context.save()
+                                saveFailure = context.saveReportingFailure()
                             } label: {
                                 Label("Archive", systemImage: "archivebox")
                             }
@@ -107,7 +108,7 @@ struct AccountsView: View {
                             }
                             Button {
                                 card.isArchived = true
-                                try? context.save()
+                                saveFailure = context.saveReportingFailure()
                             } label: {
                                 Label("Archive", systemImage: "archivebox")
                             }
@@ -124,7 +125,7 @@ struct AccountsView: View {
                                 Spacer()
                                 Button("Restore") {
                                     account.isArchived = false
-                                    try? context.save()
+                                    saveFailure = context.saveReportingFailure()
                                 }
                                 .buttonStyle(.borderless)
                                 .font(.caption)
@@ -136,7 +137,7 @@ struct AccountsView: View {
                                 Spacer()
                                 Button("Restore") {
                                     card.isArchived = false
-                                    try? context.save()
+                                    saveFailure = context.saveReportingFailure()
                                 }
                                 .buttonStyle(.borderless)
                                 .font(.caption)
@@ -183,7 +184,7 @@ struct AccountsView: View {
                 Button("Delete account and transactions", role: .destructive) {
                     if let pendingAccountDeletion {
                         context.delete(pendingAccountDeletion)
-                        try? context.save()
+                        saveFailure = context.saveReportingFailure()
                     }
                     pendingAccountDeletion = nil
                 }
@@ -202,7 +203,7 @@ struct AccountsView: View {
                 Button("Delete card and transactions", role: .destructive) {
                     if let pendingCardDeletion {
                         context.delete(pendingCardDeletion)
-                        try? context.save()
+                        saveFailure = context.saveReportingFailure()
                     }
                     pendingCardDeletion = nil
                 }
@@ -210,6 +211,7 @@ struct AccountsView: View {
             } message: {
                 Text("Archiving keeps the history and hides the card instead.")
             }
+            .saveFailureAlert($saveFailure)
         }
     }
 
@@ -329,6 +331,7 @@ struct AccountEditorView: View {
     @State private var openingBalance: Decimal = .zero
     @State private var note = ""
     @State private var isShowingAmountPad = false
+    @State private var saveFailure: String?
 
     private var isNew: Bool { account == nil }
 
@@ -388,6 +391,7 @@ struct AccountEditorView: View {
                     Button("Save", action: save).disabled(!canSave)
                 }
             }
+            .saveFailureAlert($saveFailure)
             .sheet(isPresented: $isShowingAmountPad) {
                 OpeningBalanceSheet(value: $openingBalance)
             }
@@ -432,7 +436,10 @@ struct AccountEditorView: View {
             )
             context.insert(created)
         }
-        try? context.save()
+        if let failure = context.saveReportingFailure() {
+            saveFailure = failure
+            return
+        }
         dismiss()
     }
 }
