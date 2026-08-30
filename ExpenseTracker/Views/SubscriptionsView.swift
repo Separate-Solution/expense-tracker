@@ -189,8 +189,39 @@ struct RecurringRuleEditorView: View {
 
     private var isNew: Bool { rule == nil }
 
+    /// Categories of the current type, plus the one this rule already uses.
+    ///
+    /// Hiding an archived category from the picker leaves its row blank when a
+    /// rule still points at one. The category itself survives a save — that
+    /// resolves against every category, not this list — but a blank row reads
+    /// like the rule has lost it.
     private var categories: [Category] {
-        allCategories.filter { $0.type == type && !$0.isArchived }
+        let visible = allCategories.filter { $0.type == type && !$0.isArchived }
+        guard let current = rule?.category,
+              current.type == type,
+              !visible.contains(where: { $0.id == current.id }) else { return visible }
+        return (visible + [current]).sorted { $0.sortIndex < $1.sortIndex }
+    }
+
+    /// The unarchived accounts, plus the one this rule already posts into.
+    ///
+    /// Archiving an account keeps its history, and a rule can still be pointed
+    /// at one. Left out of the list, its picker row matches no option, and
+    /// saving resolves it to nil — so editing the amount or the schedule would
+    /// quietly detach the rule from its account and start posting occurrences
+    /// with none. Keeping it selectable means an unrelated edit can't strip it.
+    private var selectableAccounts: [Account] {
+        guard let account = rule?.account,
+              !accounts.contains(where: { $0.id == account.id }) else { return accounts }
+        return (accounts + [account]).sorted { $0.sortIndex < $1.sortIndex }
+    }
+
+    /// The unarchived cards, plus the one this rule already charges, for the
+    /// same reason.
+    private var selectableCards: [CreditCard] {
+        guard let card = rule?.creditCard,
+              !cards.contains(where: { $0.id == card.id }) else { return cards }
+        return (cards + [card]).sorted { $0.sortIndex < $1.sortIndex }
     }
 
     private var canSave: Bool {
@@ -252,7 +283,11 @@ struct RecurringRuleEditorView: View {
                             Label(category.name, systemImage: category.symbol).tag(Optional(category.id))
                         }
                     }
-                    PaymentSourcePicker(accounts: accounts, cards: cards, selection: $source)
+                    PaymentSourcePicker(
+                        accounts: selectableAccounts,
+                        cards: selectableCards,
+                        selection: $source
+                    )
                     TextField("Note", text: $note, axis: .vertical)
                         .lineLimit(2...4)
                 }
@@ -311,8 +346,8 @@ struct RecurringRuleEditorView: View {
     private func save() {
         let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
         let category = allCategories.first { $0.id == categoryID }
-        let account = PaymentSourceResolver.account(source, in: accounts)
-        let card = PaymentSourceResolver.card(source, in: cards)
+        let account = PaymentSourceResolver.account(source, in: selectableAccounts)
+        let card = PaymentSourceResolver.card(source, in: selectableCards)
 
         if let rule {
             rule.title = trimmed
