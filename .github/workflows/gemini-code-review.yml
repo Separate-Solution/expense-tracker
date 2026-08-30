@@ -1,22 +1,57 @@
 name: Gemini Code Review
+
 on:
   pull_request:
     types: [opened, synchronize, reopened]
 
+# A new push supersedes the review still running for the old commit.
+concurrency:
+  group: gemini-review-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
 jobs:
   review:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     permissions:
       contents: read
       pull-requests: write
     steps:
       - uses: actions/checkout@v4
-      - uses: sshnaidm/gemini-code-review-action@v2
         with:
-          model: gemini-3.6-flash
-          gemini-key: ${{ secrets.GEMINI_CODE_REVIEW }}
-          prompt: |
-            Review this diff with focus on:
-            - Security issues (injection, auth flaws, unsafe deserialization, secrets)
-            - Bugs and edge cases
-            - Code quality / maintainability
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - run: pip install google-genai==2.20.0
+
+      - name: Run Gemini code review
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_CODE_REVIEW }}
+          GEMINI_MODEL: gemini-3.7-flash
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          REVIEW_OUTPUT: review_output.md
+        run: python .github/scripts/gemini_review.py
+
+      - name: Post review comment
+        if: hashFiles('review_output.md') != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+          REPO: ${{ github.repository }}
+        run: |
+          marker='<!-- gemini-code-review -->'
+          { echo "$marker"; echo '## Code Review by Gemini'; echo; cat review_output.md; } > comment.md
+
+          # Update the previous review comment instead of stacking a new one per push.
+          id=$(gh api "repos/$REPO/issues/$PR/comments" --paginate \
+                 --jq "[.[] | select(.user.type == \"Bot\" and (.body | startswith(\"$marker\")))] | last | .id")
+
+          if [ -n "$id" ] && [ "$id" != "null" ]; then
+            gh api -X PATCH "repos/$REPO/issues/comments/$id" -F body=@comment.md
+          else
+            gh api -X POST "repos/$REPO/issues/$PR/comments" -F body=@comment.md
+          fi
