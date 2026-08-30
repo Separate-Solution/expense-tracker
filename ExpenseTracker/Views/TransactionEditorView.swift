@@ -116,6 +116,16 @@ struct TransactionEditorView: View {
                                     .tag(Optional(account.id))
                             }
                         }
+                        // Moving "From" onto the account already picked as "To"
+                        // drops it out of this picker's list, which would leave
+                        // a selection showing nothing. Clear it so the row reads
+                        // "Choose an account" and says what it needs.
+                        .onChange(of: source) { _, newSource in
+                            if PaymentSourceResolver.account(newSource, in: accounts)?.id
+                                == destinationID {
+                                destinationID = nil
+                            }
+                        }
                     }
 
                     DateTimeRow(label: "Date & Time", selection: $date)

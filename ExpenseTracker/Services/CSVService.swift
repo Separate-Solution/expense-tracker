@@ -488,7 +488,9 @@ enum CSVService {
                 id: existingID ?? UUID(),
                 title: title,
                 amount: abs(signedAmount).roundedToCurrency,
-                type: type,
+                // A movement always leaves its source; the other end picks it
+                // up. A file claiming income would credit both sides at once.
+                type: kind.isMovement ? .expense : type,
                 date: date,
                 note: field(.note),
                 kind: kind,

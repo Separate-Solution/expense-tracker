@@ -149,13 +149,13 @@ final class Transaction {
     /// - Parameter source: The account or card being filtered on.
     /// - Returns: True when this row involves it.
     func involves(_ source: PaymentSource) -> Bool {
-        if paymentSource == source { return true }
+        // Read straight off the relationships rather than through
+        // `paymentSource`, which picks one end when a row has two — leaning on
+        // that order would make this quietly wrong if the order ever changed.
         switch source {
         case .account(let id):
-            return toAccount?.id == id
+            return account?.id == id || toAccount?.id == id
         case .creditCard(let id):
-            // A card payment reports its paying account as the source, so the
-            // card it settles is only reachable through this side.
             return creditCard?.id == id
         }
     }
