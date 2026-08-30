@@ -199,13 +199,20 @@ struct DataManagementView: View {
             showStatus("Import failed", error.localizedDescription)
         case .success(let urls):
             guard let url = urls.first else { return }
-            progress = TaskProgress(label: "Reading file")
-            defer { progress = nil }
-            do {
+            // Through `run` like the others: setting and clearing `progress`
+            // within one synchronous call never gave SwiftUI a turn to draw it.
+            run("Reading file") { report in
+                // Two steps, not a row count. Reading the file and parsing it
+                // are each a single pass, so the yield between them is the only
+                // point the ring can actually move.
                 let text = try readSecurityScoped(url) { try String(contentsOf: $0, encoding: .utf8) }
+                report(0.5)
+                await Task.yield()
+                let plan = try CSVService.prepare(from: text)
                 confirmedImport = nil
-                pendingCSV = try CSVService.prepare(from: text)
-            } catch {
+                pendingCSV = plan
+                report(1)
+            } onFailure: { error in
                 showStatus("Import failed", error.localizedDescription)
             }
         }
@@ -277,11 +284,16 @@ struct DataManagementView: View {
             showStatus("Couldn't open backup", error.localizedDescription)
         case .success(let urls):
             guard let url = urls.first else { return }
-            do {
+            // Decoding a large backup is as slow as reading a CSV, so it gets
+            // the same treatment rather than freezing on a still screen.
+            run("Reading backup") { report in
                 let data = try readSecurityScoped(url) { try Data(contentsOf: $0) }
+                report(0.5)
+                await Task.yield()
                 pendingRestore = try BackupService.decode(data)
                 isConfirmingRestore = true
-            } catch {
+                report(1)
+            } onFailure: { error in
                 showStatus("Couldn't open backup", error.localizedDescription)
             }
         }
