@@ -41,13 +41,10 @@ enum CardPaymentService {
             category: nil
         )
         context.insert(payment)
-        do {
-            try context.save()
-        } catch {
-            // Take the half-made payment back out, or the next successful save
-            // anywhere in the app would commit one the user was told had failed.
-            context.delete(payment)
-            throw error
+        // Rolls the insert back on failure, so a payment the sheet is about to
+        // report as failed can't be left pending for the next save to commit.
+        if let failure = context.saveReportingFailure() {
+            throw failure
         }
         return payment
     }
