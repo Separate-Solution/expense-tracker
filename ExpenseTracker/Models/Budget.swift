@@ -138,8 +138,8 @@ final class Budget {
 
     /// The period `date` falls in.
     /// - Parameter date: The day to locate; defaults to now.
-    /// - Returns: The window, inclusive of both ends.
-    func period(containing date: Date = .now) -> DateInterval {
+    /// - Returns: The window it belongs to.
+    func period(containing date: Date = .now) -> BudgetWindow {
         schedule.period(containing: date)
     }
 
@@ -212,6 +212,28 @@ final class Budget {
     }
 }
 
+/// One budget period: open at the start, closed just before the next one opens.
+///
+/// The end is deliberately exclusive. Writing it as "one second before the next
+/// period" would drop a transaction stamped in the fraction of a second between
+/// the two — `Date()` keeps sub-second precision, so that gap is reachable.
+struct BudgetWindow {
+
+    /// First moment the period covers.
+    let start: Date
+    /// First moment it no longer covers — the next period's start.
+    let end: Date
+
+    /// Whether the period covers `date`.
+    /// - Parameter date: The moment to test.
+    /// - Returns: True when it falls in this window.
+    func contains(_ date: Date) -> Bool { date >= start && date < end }
+
+    /// The last moment the period covers, for showing the window to the reader
+    /// — "30 Aug \u{2013} 29 Sep" rather than a range ending on the 30th.
+    var lastMoment: Date { max(start, end.addingTimeInterval(-1)) }
+}
+
 /// A budget's timing, apart from the budget itself: where its periods start and
 /// how long each one runs. Split out so the editor can preview the window a
 /// budget *would* have before anything is saved.
@@ -224,6 +246,9 @@ struct BudgetSchedule {
     /// Last day of a `.custom` window; unused by the repeating periods.
     let endDate: Date?
 
+    /// Units per period, never below one.
+    private var step: Int { max(1, interval) }
+
     /// Start of the nth period, always measured from `startDate` so months never
     /// drift — one starting on the 31st lands on the 28th in February and back
     /// on the 31st in March.
@@ -235,7 +260,7 @@ struct BudgetSchedule {
         guard let component = period.calendarComponent else { return nil }
         return Calendar.current.date(
             byAdding: component,
-            value: index * max(1, interval),
+            value: index * step,
             to: startDate.startOfDay
         )
     }
@@ -243,27 +268,64 @@ struct BudgetSchedule {
     /// The period `date` falls in — the first period when the budget hasn't
     /// begun yet, and the last one when a custom window has already closed.
     /// - Parameter date: The day to locate; defaults to now.
-    /// - Returns: The window, inclusive of both ends.
-    func period(containing date: Date = .now) -> DateInterval {
+    /// - Returns: The window it belongs to.
+    func period(containing date: Date = .now) -> BudgetWindow {
         let opening = startDate.startOfDay
         guard period.isRepeating else {
             // A custom window with no end date is open-ended; a year gives the
-            // progress bar something finite to measure against.
-            let close = (endDate ?? opening.addingMonths(12)).endOfDay
-            return DateInterval(start: opening, end: max(opening, close))
+            // progress bar something finite to measure against. The window runs
+            // to the end of its last day, so the exclusive end is the midnight
+            // that follows.
+            let lastDay = (endDate ?? opening.addingMonths(12)).startOfDay
+            let close = Calendar.current.date(byAdding: DateComponents(day: 1), to: lastDay)
+                ?? lastDay
+            return BudgetWindow(start: opening, end: max(opening, close))
         }
-        var index = 0
-        // Walk forward with a generous bound so a budget left alone for years
-        // still resolves rather than looping without end.
-        while index < 10_000,
-              let next = periodStart(at: index + 1),
-              next <= date {
-            index += 1
-        }
+        let index = periodIndex(containing: date)
         let start = periodStart(at: index) ?? opening
         guard let nextStart = periodStart(at: index + 1) else {
-            return DateInterval(start: start, end: start.endOfDay)
+            return BudgetWindow(start: start, end: start.endOfDay)
         }
-        return DateInterval(start: start, end: nextStart.addingTimeInterval(-1))
+        return BudgetWindow(start: start, end: nextStart)
+    }
+
+    /// Which period `date` falls in.
+    ///
+    /// The index is worked out arithmetically rather than by stepping one period
+    /// at a time: a daily budget running for years would otherwise cost
+    /// thousands of calendar calls every time a row is drawn. Calendars clamp
+    /// and skip — a month-end start, a DST change — so the estimate is nudged
+    /// into place afterwards, which takes a step or two at most.
+    /// - Parameter date: The day to locate.
+    /// - Returns: The zero-based period number, never below zero.
+    private func periodIndex(containing date: Date) -> Int {
+        let calendar = Calendar.current
+        let opening = startDate.startOfDay
+        guard date > opening else { return 0 }
+
+        let elapsed: Int
+        switch period {
+        case .day:
+            elapsed = calendar.dateComponents([.day], from: opening, to: date).day ?? 0
+        case .week:
+            elapsed = (calendar.dateComponents([.day], from: opening, to: date).day ?? 0) / 7
+        case .month:
+            elapsed = calendar.dateComponents([.month], from: opening, to: date).month ?? 0
+        case .year:
+            elapsed = calendar.dateComponents([.year], from: opening, to: date).year ?? 0
+        case .custom:
+            return 0
+        }
+
+        var index = max(0, elapsed / step)
+        // Both corrections are bounded: the estimate is never more than a period
+        // or two out, and each loop only runs while it is.
+        while index > 0, let current = periodStart(at: index), current > date {
+            index -= 1
+        }
+        while let next = periodStart(at: index + 1), next <= date {
+            index += 1
+        }
+        return index
     }
 }

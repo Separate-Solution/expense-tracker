@@ -207,7 +207,7 @@ struct BudgetProgressBar: View {
     /// The window these figures cover, e.g. "1 Aug – 31 Aug".
     private var periodCaption: String {
         let start = progress.period.start.formatted(.dateTime.day().month(.abbreviated))
-        let end = progress.period.end.formatted(.dateTime.day().month(.abbreviated))
+        let end = progress.period.lastMoment.formatted(.dateTime.day().month(.abbreviated))
         return "\(start) \u{2013} \(end)"
     }
 }

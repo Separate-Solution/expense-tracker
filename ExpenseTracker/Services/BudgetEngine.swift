@@ -4,7 +4,7 @@ import Foundation
 struct BudgetProgress {
 
     /// The window these figures cover.
-    let period: DateInterval
+    let period: BudgetWindow
     /// The limit or target for one period.
     let target: Decimal
     /// How much of it the matching transactions have used up. Negative when
@@ -38,8 +38,9 @@ struct BudgetProgress {
     /// Whole days left in the period, counting today. Zero once it is over.
     var daysRemaining: Int {
         let today = Date.now.startOfDay
-        guard period.end >= today else { return 0 }
-        let days = Calendar.current.dateComponents([.day], from: today, to: period.end.startOfDay).day ?? 0
+        let lastDay = period.lastMoment.startOfDay
+        guard lastDay >= today else { return 0 }
+        let days = Calendar.current.dateComponents([.day], from: today, to: lastDay).day ?? 0
         return max(0, days) + 1
     }
 }

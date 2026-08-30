@@ -41,11 +41,12 @@ struct BudgetEditorView: View {
         amount > 0
             && !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             && !(scope.needsCategorySelection && includedCategoryIDs.isEmpty)
+            && (period.isRepeating || endDate >= startDate)
     }
 
     /// The window the budget as configured would be in, so the footer can show
     /// real dates rather than a description of them.
-    private var previewPeriod: DateInterval {
+    private var previewPeriod: BudgetWindow {
         let schedule = BudgetSchedule(
             period: period,
             interval: max(1, periodInterval),
@@ -90,6 +91,13 @@ struct BudgetEditorView: View {
 
                 Section {
                     DatePicker("Starts", selection: $startDate, displayedComponents: .date)
+                        .onChange(of: startDate) { _, newValue in
+                            // The end picker only bars dates before the start
+                            // while it is on screen; moving the start past an
+                            // end already chosen would otherwise save a window
+                            // that finishes before it opens.
+                            if endDate < newValue { endDate = newValue.addingMonths(1) }
+                        }
                     if !period.isRepeating {
                         DatePicker("Ends", selection: $endDate, in: startDate..., displayedComponents: .date)
                     }
@@ -231,7 +239,7 @@ struct BudgetEditorView: View {
 
     private var amountFooter: String {
         let window = "\(previewPeriod.start.formatted(Formatters.shortDate)) "
-            + "\u{2013} \(previewPeriod.end.formatted(Formatters.shortDate))"
+            + "\u{2013} \(previewPeriod.lastMoment.formatted(Formatters.shortDate))"
         guard amount > 0 else { return "This period runs \(window)." }
         let cadence = period.isRepeating
             ? "every \(max(1, periodInterval) == 1 ? "" : "\(periodInterval) ")\(period.unitLabel(interval: max(1, periodInterval)))"
