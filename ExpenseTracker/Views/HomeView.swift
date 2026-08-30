@@ -24,6 +24,7 @@ struct HomeView: View {
     @Query(filter: #Predicate<CreditCard> { !$0.isArchived }, sort: \CreditCard.sortIndex)
     private var cards: [CreditCard]
     @Query private var rules: [RecurringRule]
+    @Query(sort: \Budget.sortIndex) private var budgets: [Budget]
 
     @State private var monthAnchor = Date().startOfMonth
     @State private var editingTransaction: Transaction?
@@ -36,6 +37,13 @@ struct HomeView: View {
                     summaryCard
                     if !cards.isEmpty {
                         CreditCardDueSection(cards: cards, accounts: accounts)
+                    }
+                    // TODO: Every active budget is shown here for now. Once the
+                    // dashboard can be arranged by hand, this becomes whichever
+                    // budgets have been pinned to it, alongside whatever else
+                    // the user pins.
+                    if !activeBudgets.isEmpty {
+                        BudgetsDashboardSection(budgets: activeBudgets, transactions: transactions)
                     }
                     if !accounts.isEmpty { accountsStrip }
                     if !upcoming.isEmpty { upcomingSection }
@@ -54,6 +62,11 @@ struct HomeView: View {
             }
         }
     }
+
+    /// Budgets on the dashboard. Archiving one is how it is put away, so an
+    /// archived budget stays off here as well as out of the list's Active
+    /// section.
+    private var activeBudgets: [Budget] { budgets.filter { !$0.isArchived } }
 
     // MARK: - Month scope
 
