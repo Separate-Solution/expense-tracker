@@ -93,16 +93,24 @@ struct SettingsView: View {
 
                     Picker(selection: $defaultAccountID) {
                         Text("Most recently used").tag("")
-                        Section("Bank Accounts") {
-                            ForEach(accounts) { account in
-                                Text(account.name)
-                                    .tag(PaymentSourceResolver.encode(.account(account.id)))
+                        // A heading with nothing under it reads as a list that
+                        // failed to load, so each one waits until it has
+                        // something to head — the same rule the shared payment
+                        // source picker follows.
+                        if !accounts.isEmpty {
+                            Section("Bank Accounts") {
+                                ForEach(accounts) { account in
+                                    Text(account.name)
+                                        .tag(PaymentSourceResolver.encode(.account(account.id)))
+                                }
                             }
                         }
-                        Section("Credit Cards") {
-                            ForEach(cards) { card in
-                                Text(card.name)
-                                    .tag(PaymentSourceResolver.encode(.creditCard(card.id)))
+                        if !cards.isEmpty {
+                            Section("Credit Cards") {
+                                ForEach(cards) { card in
+                                    Text(card.name)
+                                        .tag(PaymentSourceResolver.encode(.creditCard(card.id)))
+                                }
                             }
                         }
                     } label: {
