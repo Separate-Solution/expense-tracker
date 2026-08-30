@@ -9,7 +9,7 @@ import subprocess
 import sys
 
 from google import genai
-from google.genai import types
+from google.genai import errors, types
 
 # Paths that add diff noise without adding review value.
 EXCLUDED = [
@@ -89,15 +89,37 @@ def main() -> None:
         ),
     )
 
-    response = client.models.generate_content(
-        model=os.environ.get("GEMINI_MODEL", "gemini-3.7-flash"),
-        contents=PROMPT.format(diff=diff),
-        config=types.GenerateContentConfig(temperature=0.0),
-    )
+    models = [
+        m.strip()
+        for m in os.environ.get("GEMINI_MODELS", "gemini-3.7-flash,gemini-3.6-flash").split(",")
+        if m.strip()
+    ]
 
-    review = (response.text or "").strip()
+    # The newest Flash model sheds load under demand spikes, and retrying the
+    # same model does not help once a spike outlasts the backoff window. Fall
+    # through to an older, less contended model rather than skipping the review.
+    review = ""
+    for index, model in enumerate(models):
+        try:
+            response = client.models.generate_content(
+                model=model,
+                contents=PROMPT.format(diff=diff),
+                config=types.GenerateContentConfig(temperature=0.0),
+            )
+        except errors.ServerError as exc:
+            print(f"{model} unavailable after retries: {exc}", file=sys.stderr)
+            if index == len(models) - 1:
+                sys.exit("Every configured model was unavailable.")
+            continue
+
+        review = (response.text or "").strip()
+        if review:
+            print(f"Reviewed with {model}.")
+            break
+        print(f"{model} returned an empty review.", file=sys.stderr)
+
     if not review:
-        sys.exit("Gemini returned an empty review.")
+        sys.exit("No model produced a review.")
 
     with open(output_path, "w") as f:
         f.write(review)

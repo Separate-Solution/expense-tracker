@@ -30,7 +30,7 @@ jobs:
       - name: Run Gemini code review
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_CODE_REVIEW }}
-          GEMINI_MODEL: gemini-3.7-flash
+          GEMINI_MODELS: gemini-3.7-flash,gemini-3.6-flash
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           REVIEW_OUTPUT: review_output.md
