@@ -16,6 +16,7 @@ struct SettingsView: View {
     @Query private var transactions: [Transaction]
     @Query private var categories: [Category]
     @Query private var rules: [RecurringRule]
+    @Query private var budgets: [Budget]
 
     /// Rewrites a default saved before credit cards existed — a bare UUID —
     /// into the tagged form the picker's rows carry, so an upgraded install
@@ -51,6 +52,13 @@ struct SettingsView: View {
                     } label: {
                         Label("Categories", systemImage: "square.grid.2x2")
                             .badge(categories.count)
+                    }
+
+                    NavigationLink {
+                        BudgetsView()
+                    } label: {
+                        Label("Budgets", systemImage: "chart.pie")
+                            .badge(budgets.filter { !$0.isArchived }.count)
                     }
 
                     NavigationLink {

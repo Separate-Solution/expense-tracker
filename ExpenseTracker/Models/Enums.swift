@@ -167,3 +167,158 @@ enum PaymentSource: Hashable, Identifiable {
         }
     }
 }
+
+/// What a budget is trying to do. An expense budget caps what may go out; a
+/// savings budget sets a target to put aside. The two run the same maths in
+/// opposite directions, so one model covers both.
+enum BudgetKind: String, Codable, CaseIterable, Identifiable {
+    case expense
+    case savings
+
+    var id: String { rawValue }
+
+    /// Display name used on the type switch and section headers.
+    var title: String {
+        switch self {
+        case .expense: return "Expense"
+        case .savings: return "Savings"
+        }
+    }
+
+    /// Verb for what has been counted so far — "Spent" against a limit,
+    /// "Saved" towards a target.
+    var appliedLabel: String {
+        switch self {
+        case .expense: return "Spent"
+        case .savings: return "Saved"
+        }
+    }
+
+    /// What the untouched part of the budget is called.
+    var remainingLabel: String {
+        switch self {
+        case .expense: return "left"
+        case .savings: return "to go"
+        }
+    }
+
+    /// What the amount field means for this kind.
+    var amountLabel: String {
+        switch self {
+        case .expense: return "Limit"
+        case .savings: return "Target"
+        }
+    }
+
+    /// SF Symbol for the budget's badge.
+    var symbolName: String {
+        switch self {
+        case .expense: return "chart.pie"
+        case .savings: return "banknote"
+        }
+    }
+
+    /// Which direction of money counts towards the budget. An expense budget
+    /// fills up as money goes out and is brought back down by a refund; a
+    /// savings budget fills up as money comes in.
+    var countingSign: Decimal { self == .savings ? 1 : -1 }
+
+    /// The scope a new budget of this kind starts with.
+    var defaultScope: BudgetScope { self == .savings ? .allIncome : .allExpenses }
+}
+
+/// The window a budget's amount applies to — "₹500 per 2 weeks". `.custom` is
+/// the odd one out: it is a single stretch between two dates that never
+/// repeats, for a trip or a one-off project.
+enum BudgetPeriod: String, Codable, CaseIterable, Identifiable {
+    case day
+    case week
+    case month
+    case year
+    case custom
+
+    var id: String { rawValue }
+
+    /// Display name used in the period picker.
+    var title: String {
+        switch self {
+        case .day: return "Day"
+        case .week: return "Week"
+        case .month: return "Month"
+        case .year: return "Year"
+        case .custom: return "Custom"
+        }
+    }
+
+    /// The unit noun, pluralised to match `interval`.
+    /// - Parameter interval: How many units each period spans.
+    /// - Returns: E.g. "month" for 1, "months" for 3.
+    func unitLabel(interval: Int) -> String {
+        let singular: String
+        switch self {
+        case .day: singular = "day"
+        case .week: singular = "week"
+        case .month: singular = "month"
+        case .year: singular = "year"
+        case .custom: return "custom period"
+        }
+        return interval == 1 ? singular : "\(singular)s"
+    }
+
+    /// The `Calendar` component periods step by; nil for `.custom`, which does
+    /// not step at all.
+    var calendarComponent: Calendar.Component? {
+        switch self {
+        case .day: return .day
+        case .week: return .weekOfYear
+        case .month: return .month
+        case .year: return .year
+        case .custom: return nil
+        }
+    }
+
+    /// Whether the period rolls over into a fresh one when it ends.
+    var isRepeating: Bool { self != .custom }
+}
+
+/// Which transactions a budget counts. Categories a budget excludes are taken
+/// out of whichever of these is chosen.
+enum BudgetScope: String, Codable, CaseIterable, Identifiable {
+    /// Every expense in range.
+    case allExpenses
+    /// Every income row in range.
+    case allIncome
+    /// Both directions, netted against each other.
+    case everything
+    /// Only the categories picked by hand.
+    case categories
+
+    var id: String { rawValue }
+
+    /// Display name used in the "counts" picker.
+    var title: String {
+        switch self {
+        case .allExpenses: return "All expenses"
+        case .allIncome: return "All income"
+        case .everything: return "Income and expenses"
+        case .categories: return "Chosen categories"
+        }
+    }
+
+    /// One line saying what this scope pulls in, for the picker's footer.
+    var explanation: String {
+        switch self {
+        case .allExpenses:
+            return "Every expense in the period counts. Refunds bring the total back down."
+        case .allIncome:
+            return "Every income transaction in the period counts."
+        case .everything:
+            return "Income and expenses are netted against each other."
+        case .categories:
+            return "Only transactions in the categories you pick count."
+        }
+    }
+
+    /// Whether this scope needs a hand-picked category list.
+    var needsCategorySelection: Bool { self == .categories }
+}

@@ -83,6 +83,31 @@ name, a credit limit, the day its statement closes and the day the bill is due.
 Hiding a category keeps its transactions labelled; deleting leaves them
 "Uncategorized" rather than destroying them.
 
+**Budgets** (Settings → Budgets) — a spending cap or a savings target measured
+over a repeating window. A budget holds no money of its own; it watches the
+transactions that already exist and reports how much of the period's amount they
+have used up.
+
+- **Expense** budgets fill up as money goes out and are unwound by a refund;
+  **savings** budgets fill up as money comes in. The switch at the top of the
+  editor picks which.
+- The amount is written as an amount *per* period — "₹500 / 2 weeks". The unit is
+  a day, week, month or year, or a **custom** one-off window between two dates
+  that never repeats. Repeating periods are measured from the start date, so one
+  starting on the 31st lands on the 28th in February and back on the 31st in
+  March rather than drifting earlier.
+- What counts is one choice — all expenses, all income, both netted, or only the
+  categories you tick — narrowed by the categories you exclude and, when any are
+  ticked, by the accounts and cards the budget is tied to. Ticking no account
+  counts every one of them.
+- Transfers and card payments never count: they settle or relocate money that was
+  already counted when it was spent. Nor does anything dated in the future — it
+  is on the Upcoming list, and the money hasn't moved yet.
+- Each row shows what has gone against the budget, what is left, how many days
+  the period has to run, and a bar that turns red once an expense budget is
+  overspent. Archiving a budget keeps it and its history; deleting one leaves
+  every transaction untouched.
+
 **Recurring & subscriptions** — daily/weekly/monthly/yearly with an every-N
 interval and an optional end date. Occurrences post themselves on launch and
 whenever the app comes to the foreground. Monthly rules are always measured from
@@ -146,9 +171,10 @@ formatting, never stored values.
 ```
 ExpenseTracker/
   App/         app entry and the model container
-  Models/      Account, CreditCard, Category, Transaction, RecurringRule (SwiftData)
+  Models/      Account, CreditCard, Category, Transaction, RecurringRule, Budget
+               (SwiftData)
   Services/    CalculatorEngine, RecurrenceEngine, BillingCycle, CardPaymentService,
-               TransferService, CSVService, BackupService, SeedData
+               TransferService, CSVService, BackupService, BudgetEngine, SeedData
   Theme/       palette, card style, currency and date formatting
   Views/       one file per screen, plus AddTransaction/ and Components/
 Config/
@@ -162,5 +188,6 @@ under `ExpenseTracker/` are picked up without touching the project file.
 
 - Minimum-due amounts, interest and late fees on cards — the bill is always the
   full statement balance.
-- Budgets, per-category limits, charts beyond the month's top-five breakdown.
+- Charts beyond the month's top-five breakdown; budget history for periods
+  that have already closed.
 - Automatic tracking / bank sync — deliberately out of scope.

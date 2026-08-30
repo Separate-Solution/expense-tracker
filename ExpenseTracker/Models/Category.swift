@@ -25,6 +25,12 @@ final class Category {
     @Relationship(deleteRule: .nullify, inverse: \RecurringRule.category)
     var recurringRules: [RecurringRule]? = []
 
+    /// Budgets counting this category, when they count categories by hand.
+    var includingBudgets: [Budget]? = []
+
+    /// Budgets that leave this category out of whatever else they count.
+    var excludingBudgets: [Budget]? = []
+
     /// Creates a category.
     /// - Parameters:
     ///   - id: Stable identifier; a fresh UUID unless restoring from a backup.

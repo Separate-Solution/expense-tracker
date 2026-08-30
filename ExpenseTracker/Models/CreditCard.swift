@@ -32,6 +32,9 @@ final class CreditCard {
     @Relationship(deleteRule: .nullify, inverse: \RecurringRule.creditCard)
     var recurringRules: [RecurringRule]? = []
 
+    /// Budgets narrowed to this card. A budget tied to none watches them all.
+    var budgets: [Budget]? = []
+
     /// Creates a credit card.
     /// - Parameters:
     ///   - id: Stable identifier; a fresh UUID unless restoring from a backup.
