@@ -370,6 +370,10 @@ enum BackupService {
                 createdAt: dto.createdAt
             )
             transaction.updatedAt = dto.updatedAt
+            // The file is the one input nothing in the app validated on the way
+            // in, so the movement invariants are enforced here rather than
+            // trusted.
+            transaction.normaliseMovement()
             context.insert(transaction)
         }
 

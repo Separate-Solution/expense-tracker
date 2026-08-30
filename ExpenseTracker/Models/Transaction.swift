@@ -144,6 +144,37 @@ final class Transaction {
         return "\(sourceName) \u{2192} \(destinationName)"
     }
 
+    /// Forces the invariants a movement depends on, for rows arriving from
+    /// outside the app where nothing enforced them — a restored backup can say
+    /// anything, having been a file on disk in between.
+    ///
+    /// A movement always leaves its source, so its direction is fixed; one
+    /// missing an end would take money out with nowhere to put it, so it drops
+    /// to an ordinary transaction rather than losing the amount; and a row that
+    /// isn't a transfer has no business naming a destination, which the
+    /// receiving account would otherwise count as money arriving.
+    func normaliseMovement() {
+        switch kind {
+        case .standard:
+            toAccount = nil
+        case .transfer:
+            if account == nil || toAccount == nil || account?.id == toAccount?.id {
+                kind = .standard
+                toAccount = nil
+            } else {
+                type = .expense
+            }
+        case .cardPayment:
+            if account == nil || creditCard == nil {
+                kind = .standard
+                toAccount = nil
+            } else {
+                type = .expense
+                toAccount = nil
+            }
+        }
+    }
+
     /// Whether this row touches `source` at either end. A transfer belongs to
     /// both accounts it moves between, so filtering by either should find it.
     /// - Parameter source: The account or card being filtered on.

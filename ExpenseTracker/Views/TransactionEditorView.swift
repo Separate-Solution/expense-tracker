@@ -32,6 +32,30 @@ struct TransactionEditorView: View {
         allCategories.filter { $0.type == type && !$0.isArchived }
     }
 
+    /// The unarchived accounts, plus any this transaction already points at.
+    ///
+    /// Archiving an account keeps its history, so an old transaction can still
+    /// name one. Left out of the list, its picker row would match no option and
+    /// saving would resolve it to nil — quietly detaching the transaction from
+    /// the account and moving that balance. Keeping it selectable means editing
+    /// an unrelated field can't strip it.
+    private var selectableAccounts: [Account] {
+        var result = accounts
+        for account in [transaction.account, transaction.toAccount].compactMap({ $0 })
+        where !result.contains(where: { $0.id == account.id }) {
+            result.append(account)
+        }
+        return result.sorted { $0.sortIndex < $1.sortIndex }
+    }
+
+    /// The unarchived cards, plus the one this transaction already points at,
+    /// for the same reason.
+    private var selectableCards: [CreditCard] {
+        guard let card = transaction.creditCard,
+              !cards.contains(where: { $0.id == card.id }) else { return cards }
+        return (cards + [card]).sorted { $0.sortIndex < $1.sortIndex }
+    }
+
     private var canSave: Bool {
         guard amount > 0, !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             return false
@@ -39,7 +63,7 @@ struct TransactionEditorView: View {
         guard transaction.isTransfer else { return true }
         // Both ends have to exist and differ, or the money would land nowhere
         // or come straight back to where it started.
-        let sourceID = PaymentSourceResolver.account(source, in: accounts)?.id
+        let sourceID = PaymentSourceResolver.account(source, in: selectableAccounts)?.id
         return sourceID != nil && destinationID != nil && sourceID != destinationID
     }
 
@@ -100,8 +124,8 @@ struct TransactionEditorView: View {
                     // a transfer's destination can be changed below.
                     PaymentSourcePicker(
                         label: transaction.isMovement ? "From" : "Paid with",
-                        accounts: accounts,
-                        cards: transaction.isMovement ? [] : cards,
+                        accounts: selectableAccounts,
+                        cards: transaction.isMovement ? [] : selectableCards,
                         allowsNone: !transaction.isMovement,
                         selection: $source
                     )
@@ -109,8 +133,9 @@ struct TransactionEditorView: View {
                     if transaction.isTransfer {
                         Picker("To", selection: $destinationID) {
                             Text("Choose an account").tag(UUID?.none)
-                            ForEach(accounts.filter { account in
-                                PaymentSourceResolver.account(source, in: accounts)?.id != account.id
+                            ForEach(selectableAccounts.filter { account in
+                                PaymentSourceResolver.account(source, in: selectableAccounts)?.id
+                                    != account.id
                             }) { account in
                                 Label(account.name, systemImage: account.symbolName)
                                     .tag(Optional(account.id))
@@ -121,7 +146,7 @@ struct TransactionEditorView: View {
                         // a selection showing nothing. Clear it so the row reads
                         // "Choose an account" and says what it needs.
                         .onChange(of: source) { _, newSource in
-                            if PaymentSourceResolver.account(newSource, in: accounts)?.id
+                            if PaymentSourceResolver.account(newSource, in: selectableAccounts)?.id
                                 == destinationID {
                                 destinationID = nil
                             }
@@ -226,13 +251,13 @@ struct TransactionEditorView: View {
             : allCategories.first { $0.id == categoryID }
         if transaction.isCardPayment {
             // A bill payment's card is fixed; only the paying account can move.
-            transaction.account = PaymentSourceResolver.account(source, in: accounts)
+            transaction.account = PaymentSourceResolver.account(source, in: selectableAccounts)
         } else if transaction.isTransfer {
-            transaction.account = PaymentSourceResolver.account(source, in: accounts)
-            transaction.toAccount = accounts.first { $0.id == destinationID }
+            transaction.account = PaymentSourceResolver.account(source, in: selectableAccounts)
+            transaction.toAccount = selectableAccounts.first { $0.id == destinationID }
         } else {
-            transaction.account = PaymentSourceResolver.account(source, in: accounts)
-            transaction.creditCard = PaymentSourceResolver.card(source, in: cards)
+            transaction.account = PaymentSourceResolver.account(source, in: selectableAccounts)
+            transaction.creditCard = PaymentSourceResolver.card(source, in: selectableCards)
         }
         transaction.updatedAt = Date()
         try? context.save()

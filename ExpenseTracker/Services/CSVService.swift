@@ -442,6 +442,14 @@ enum CSVService {
                 }
             }
 
+            // Compared as resolved accounts, not as column text: a blank
+            // Account column falls back to the default account, which the
+            // destination may well name, and "Checking" != "" would have made
+            // that a transfer to itself.
+            if let resolvedTo = toAccount, resolvedTo.id == account?.id {
+                toAccount = nil
+            }
+
             let kind: TransactionKind
             if toAccount != nil, account != nil {
                 kind = .transfer

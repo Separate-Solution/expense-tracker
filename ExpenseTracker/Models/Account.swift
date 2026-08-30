@@ -75,7 +75,11 @@ final class Account {
     /// outgoing side of that transfer belongs to the account it left.
     var currentBalance: Decimal {
         let ownMovements = (transactions ?? []).reduce(openingBalance) { $0 + $1.signedAmount }
-        return (incomingTransfers ?? []).reduce(ownMovements) { $0 + abs($1.amount) }
+        // Only a real transfer credits this account. Anything else pointing here
+        // is malformed, and counting it would be money from nowhere.
+        return (incomingTransfers ?? [])
+            .filter(\.isTransfer)
+            .reduce(ownMovements) { $0 + abs($1.amount) }
     }
 
     /// Balance counting only transactions dated today or earlier.
@@ -93,13 +97,13 @@ final class Account {
             .filter { $0.date <= cutoff }
             .reduce(openingBalance) { $0 + $1.signedAmount }
         return (incomingTransfers ?? [])
-            .filter { $0.date <= cutoff }
+            .filter { $0.isTransfer && $0.date <= cutoff }
             .reduce(ownMovements) { $0 + abs($1.amount) }
     }
 
     /// Everything deletion would take with it: this account's own rows plus the
     /// transfers that landed in it from elsewhere.
     var allTransactionCount: Int {
-        (transactions?.count ?? 0) + (incomingTransfers?.count ?? 0)
+        (transactions?.count ?? 0) + (incomingTransfers?.filter(\.isTransfer).count ?? 0)
     }
 }
