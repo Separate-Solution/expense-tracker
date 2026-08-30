@@ -13,7 +13,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: sshnaidm/gemini-code-review-action@v2
         with:
-          model: gemini-3.6-flash
+          model: gemini-3.7-flash
           gemini-key: ${{ secrets.GEMINI_CODE_REVIEW }}
           prompt: |
             Review this diff with focus on:
