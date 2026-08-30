@@ -267,6 +267,7 @@ enum BackupService {
     /// Wipes the store and rebuilds it from `payload`. Destructive by design —
     /// the caller confirms with the user first.
     @discardableResult
+    @MainActor
     static func restore(
         _ payload: BackupPayload,
         into context: ModelContext,
@@ -434,6 +435,7 @@ enum BackupService {
     ///   - context: The store to wipe.
     ///   - reseed: Whether to put the default categories back.
     ///   - onProgress: Called with the fraction done, 0...1.
+    @MainActor
     static func eraseAll(
         in context: ModelContext,
         reseed: Bool,

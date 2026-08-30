@@ -343,8 +343,8 @@ struct DataManagementView: View {
     ///   - onFailure: Shown if the task throws.
     private func run(
         _ label: String,
-        work: @escaping (@escaping (Double) -> Void) async throws -> Void,
-        onFailure: @escaping (Error) -> Void
+        work: @escaping @MainActor (@escaping (Double) -> Void) async throws -> Void,
+        onFailure: @escaping @MainActor (Error) -> Void
     ) {
         progress = TaskProgress(label: label)
         Task {

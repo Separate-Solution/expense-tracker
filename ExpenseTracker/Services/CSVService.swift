@@ -188,6 +188,7 @@ enum CSVService {
     /// Renders transactions as CSV using `exportHeader`, oldest first.
     /// - Parameter transactions: The rows to export.
     /// - Returns: The complete CSV text.
+    @MainActor
     static func exportString(
         transactions: [Transaction],
         onProgress: ((Double) -> Void)? = nil
@@ -227,6 +228,7 @@ enum CSVService {
     /// Parses `text`, then imports it using the automatically suggested mapping.
     /// Kept for callers that don't show the mapping screen; the UI path uses
     /// `prepare` + `commit` so the user can correct a bad guess first.
+    @MainActor
     static func importTransactions(
         from text: String,
         into context: ModelContext,
@@ -313,6 +315,7 @@ enum CSVService {
     /// Inserts transactions using an explicit mapping, creating any account or
     /// category named in the file that does not exist yet. Rows whose ID already
     /// exists are skipped so re-importing the same export is safe.
+    @MainActor
     static func commit(
         _ plan: CSVImportPlan,
         mapping: CSVColumnMapping,
