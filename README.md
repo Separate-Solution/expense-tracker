@@ -125,6 +125,15 @@ The header says how many rows were left out whenever any are.
   confirmation that tells you what's in the file.
 - *Erase all data* — wipes everything and puts the default categories back.
 
+Each of these shows a percentage while it runs. The work is pinned to the main
+actor — SwiftData's context can't leave it, and the progress it reports drives
+view state — so it yields between chunks to let the ring redraw rather than
+freezing the screen and jumping to done. The pinning is explicit: an `async`
+function is not otherwise isolated to its caller's actor, and would run on a
+background thread instead. Row-based
+tasks count rows; the backup export counts its two whole-file steps and the erase
+counts its phases, rather than inventing a finer number than it has.
+
 The app's Documents folder is exposed in **Files → On My iPhone → ExpenseTracker**
 and in Finder, so you can drop a CSV or backup in and pull exports out without
 using the share sheet.

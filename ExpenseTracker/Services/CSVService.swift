@@ -188,10 +188,15 @@ enum CSVService {
     /// Renders transactions as CSV using `exportHeader`, oldest first.
     /// - Parameter transactions: The rows to export.
     /// - Returns: The complete CSV text.
-    static func exportString(transactions: [Transaction]) -> String {
+    @MainActor
+    static func exportString(
+        transactions: [Transaction],
+        onProgress: ((Double) -> Void)? = nil
+    ) async -> String {
         var rows = [exportHeader.map(escape).joined(separator: ",")]
         let sorted = transactions.sorted { $0.date < $1.date }
-        for transaction in sorted {
+        let ticker = onProgress.map { ProgressTicker(total: sorted.count, report: $0) }
+        for (offset, transaction) in sorted.enumerated() {
             let fields = [
                 isoDateFormatter.string(from: transaction.date),
                 isoTimeFormatter.string(from: transaction.date),
@@ -209,7 +214,12 @@ enum CSVService {
                 transaction.id.uuidString
             ]
             rows.append(fields.map(escape).joined(separator: ","))
+
+            if ticker?.tick(completed: offset + 1) == true {
+                await Task.yield()
+            }
         }
+        onProgress?(1)
         return rows.joined(separator: "\n") + "\n"
     }
 
@@ -218,17 +228,25 @@ enum CSVService {
     /// Parses `text`, then imports it using the automatically suggested mapping.
     /// Kept for callers that don't show the mapping screen; the UI path uses
     /// `prepare` + `commit` so the user can correct a bad guess first.
+    @MainActor
     static func importTransactions(
         from text: String,
         into context: ModelContext,
-        defaultAccount: Account?
-    ) throws -> CSVImportSummary {
+        defaultAccount: Account?,
+        onProgress: ((Double) -> Void)? = nil
+    ) async throws -> CSVImportSummary {
         let plan = try prepare(from: text)
         let missing = plan.suggestedMapping.missingRequiredFields
         guard missing.isEmpty else {
             throw CSVError.missingRequiredColumns(missing.map(\.label))
         }
-        return try commit(plan, mapping: plan.suggestedMapping, into: context, defaultAccount: defaultAccount)
+        return try await commit(
+            plan,
+            mapping: plan.suggestedMapping,
+            into: context,
+            defaultAccount: defaultAccount,
+            onProgress: onProgress
+        )
     }
 
     /// Reads the file and works out a proposed column mapping without touching
@@ -297,12 +315,14 @@ enum CSVService {
     /// Inserts transactions using an explicit mapping, creating any account or
     /// category named in the file that does not exist yet. Rows whose ID already
     /// exists are skipped so re-importing the same export is safe.
+    @MainActor
     static func commit(
         _ plan: CSVImportPlan,
         mapping: CSVColumnMapping,
         into context: ModelContext,
-        defaultAccount: Account?
-    ) throws -> CSVImportSummary {
+        defaultAccount: Account?,
+        onProgress: ((Double) -> Void)? = nil
+    ) async throws -> CSVImportSummary {
         let missing = mapping.missingRequiredFields
         guard missing.isEmpty else {
             throw CSVError.missingRequiredColumns(missing.map(\.label))
@@ -310,6 +330,11 @@ enum CSVService {
 
         var summary = CSVImportSummary()
         summary.ignoredColumns = plan.ignoredColumns(for: mapping)
+
+        // Reported roughly a hundred times across the file rather than once per
+        // row, and yielded on the same beat so the overlay can actually redraw:
+        // this holds the main actor throughout, since the context can't leave it.
+        let ticker = onProgress.map { ProgressTicker(total: plan.rows.count, report: $0) }
 
         var accountCache = try existingAccountsByName(in: context)
         var cardCache = try existingCreditCardsByName(in: context)
@@ -511,9 +536,14 @@ enum CSVService {
             transaction.normaliseMovement()
             context.insert(transaction)
             summary.imported += 1
+
+            if ticker?.tick(completed: offset + 1) == true {
+                await Task.yield()
+            }
         }
 
         try context.save()
+        onProgress?(1)
         return summary
     }
 

@@ -267,7 +267,28 @@ enum BackupService {
     /// Wipes the store and rebuilds it from `payload`. Destructive by design —
     /// the caller confirms with the user first.
     @discardableResult
-    static func restore(_ payload: BackupPayload, into context: ModelContext) throws -> BackupSummary {
+    @MainActor
+    static func restore(
+        _ payload: BackupPayload,
+        into context: ModelContext,
+        onProgress: ((Double) -> Void)? = nil
+    ) async throws -> BackupSummary {
+        // Weighted by row count so the bar tracks the work rather than the
+        // number of phases — a file is mostly transactions.
+        let total = payload.accounts.count + (payload.creditCards ?? []).count
+            + payload.categories.count + payload.recurringRules.count
+            + payload.transactions.count
+        var done = 0
+        let ticker = onProgress.map { ProgressTicker(total: max(1, total), report: $0) }
+
+        /// Counts one restored row and lets the overlay redraw on the stride.
+        func step() async {
+            done += 1
+            if ticker?.tick(completed: done) == true {
+                await Task.yield()
+            }
+        }
+
         try context.delete(model: Transaction.self)
         try context.delete(model: RecurringRule.self)
         try context.delete(model: Category.self)
@@ -291,6 +312,7 @@ enum BackupService {
             account.isArchived = dto.isArchived
             context.insert(account)
             accountsByID[dto.id] = account
+            await step()
         }
 
         var cardsByID: [UUID: CreditCard] = [:]
@@ -311,6 +333,7 @@ enum BackupService {
             card.isArchived = dto.isArchived
             context.insert(card)
             cardsByID[dto.id] = card
+            await step()
         }
 
         var categoriesByID: [UUID: Category] = [:]
@@ -328,6 +351,7 @@ enum BackupService {
             category.isArchived = dto.isArchived
             context.insert(category)
             categoriesByID[dto.id] = category
+            await step()
         }
 
         var rulesByID: [UUID: RecurringRule] = [:]
@@ -351,6 +375,7 @@ enum BackupService {
             rule.lastPostedIndex = dto.lastPostedIndex
             context.insert(rule)
             rulesByID[dto.id] = rule
+            await step()
         }
 
         for dto in payload.transactions {
@@ -375,6 +400,7 @@ enum BackupService {
             // trusted.
             transaction.normaliseMovement()
             context.insert(transaction)
+            await step()
         }
 
         // A version 1 or 2 backup can carry accounts saved under the retired
@@ -387,6 +413,7 @@ enum BackupService {
         if !payload.currencyCode.isEmpty {
             UserDefaults.standard.set(payload.currencyCode, forKey: SettingsKey.currencyCode)
         }
+        onProgress?(1)
 
         // Counted from the store rather than the file: migrating a legacy credit
         // account turns it into a card, so the file's own tallies would report
@@ -404,15 +431,43 @@ enum BackupService {
     }
 
     /// Removes every record but keeps the default categories, for a clean slate.
-    static func eraseAll(in context: ModelContext, reseed: Bool) throws {
-        try context.delete(model: Transaction.self)
-        try context.delete(model: RecurringRule.self)
-        try context.delete(model: Category.self)
-        try context.delete(model: CreditCard.self)
-        try context.delete(model: Account.self)
+    /// - Parameters:
+    ///   - context: The store to wipe.
+    ///   - reseed: Whether to put the default categories back.
+    ///   - onProgress: Called with the fraction done, 0...1.
+    @MainActor
+    static func eraseAll(
+        in context: ModelContext,
+        reseed: Bool,
+        onProgress: ((Double) -> Void)? = nil
+    ) async throws {
+        // Nothing here is per-row, so the bar tracks the phases instead. They
+        // run in dependency order: rows before the things they point at.
+        let phases: [(String, () throws -> Void)] = [
+            ("transactions", { try context.delete(model: Transaction.self) }),
+            ("rules", { try context.delete(model: RecurringRule.self) }),
+            ("categories", { try context.delete(model: Category.self) }),
+            ("cards", { try context.delete(model: CreditCard.self) }),
+            ("accounts", { try context.delete(model: Account.self) })
+        ]
+        let steps = Double(phases.count + (reseed ? 2 : 1))
+        var done = 0.0
+
+        for (_, run) in phases {
+            try run()
+            done += 1
+            onProgress?(done / steps)
+            await Task.yield()
+        }
+
         try context.save()
+        done += 1
+        onProgress?(done / steps)
+        await Task.yield()
+
         if reseed {
             SeedData.seedIfNeeded(in: context)
+            onProgress?(1)
         }
     }
 }
