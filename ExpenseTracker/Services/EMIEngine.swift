@@ -46,6 +46,11 @@ enum EMIEngine {
 
         let closed = closeFinishedPlans(plans, asOf: date)
 
+        // TODO: A failed save here is swallowed, leaving the posted instalments
+        // only in memory while the screen shows them as real. The recurrence
+        // engine does the same, so both want one way of reporting a background
+        // catch-up that could not be written — a separate change across both,
+        // rather than one engine breaking step with the other.
         if created > 0 || closed > 0 {
             try? context.save()
         }
@@ -65,6 +70,7 @@ enum EMIEngine {
         let descriptor = FetchDescriptor<EMIPlan>()
         guard let plans = try? context.fetch(descriptor) else { return 0 }
         let closed = closeFinishedPlans(plans, asOf: date)
+        // TODO: Swallows a failed save, as above.
         if closed > 0 {
             try? context.save()
         }
