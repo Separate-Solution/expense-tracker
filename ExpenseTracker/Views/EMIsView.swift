@@ -20,6 +20,10 @@ struct EMIsView: View {
         activePlans.reduce(Decimal.zero) { $0 + $1.amountRemaining() }.roundedToCurrency
     }
 
+    /// Weeks in an average month, 52 ÷ 12. Built from whole numbers rather
+    /// than parsed from "4.345", so nothing depends on how a string is read.
+    private static let weeksPerMonth = Decimal(4345) / 1000
+
     /// Roughly what the running plans cost each month, so cadences can be
     /// compared. Weeks use 4.345 (52 ÷ 12) and days use 30, the same
     /// approximation the recurring list uses.
@@ -28,7 +32,7 @@ struct EMIsView: View {
             let perPeriod = plan.installmentAmount / Decimal(max(1, plan.interval))
             switch plan.frequency {
             case .daily: return total + perPeriod * 30
-            case .weekly: return total + perPeriod * Decimal(string: "4.345")!
+            case .weekly: return total + perPeriod * Self.weeksPerMonth
             case .monthly: return total + perPeriod
             case .quarterly: return total + perPeriod / 3
             case .yearly: return total + perPeriod / 12

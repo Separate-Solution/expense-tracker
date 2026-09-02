@@ -326,7 +326,11 @@ final class EMIPlan {
         }
         let growth = pow(1 + periodRate, Double(periods))
         let factor = periodRate * growth / (growth - 1)
-        guard factor.isFinite else { return (principal / Decimal(periods)).roundedToCurrency }
+        // An unusable rate falls back to splitting the principal evenly rather
+        // than suggesting a figure built out of NaN.
+        guard factor.isFinite, factor < 1e30 else {
+            return (principal / Decimal(periods)).roundedToCurrency
+        }
         return (principal * Decimal(factor)).roundedToCurrency
     }
 
@@ -355,8 +359,15 @@ final class EMIPlan {
         let balance: Decimal
         if rate > 0 {
             let growth = pow(1 + rate, Double(periods))
-            guard growth.isFinite else { return principal }
-            let paidOff = installmentAmount * Decimal((growth - 1) / rate)
+            let repaidFactor = (growth - 1) / rate
+            // A rate and term extreme enough to take these past what `Decimal`
+            // can hold turn every figure built on them into NaN, which would
+            // reach the screen as a quote of "NaN". The balance in that case is
+            // far beyond the principal anyway, so the cap this is already held
+            // to is the honest answer.
+            guard growth.isFinite, repaidFactor.isFinite,
+                  growth < 1e30, repaidFactor < 1e30 else { return principal }
+            let paidOff = installmentAmount * Decimal(repaidFactor)
             balance = principal * Decimal(growth) - paidOff
         } else {
             balance = principal - installmentAmount * Decimal(periods)
