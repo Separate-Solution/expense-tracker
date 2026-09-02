@@ -66,8 +66,8 @@ struct EMIEditorView: View {
         return (cards + [card]).sorted { $0.sortIndex < $1.sortIndex }
     }
 
-    private var rateValue: Decimal { Decimal(string: interestRate) ?? .zero }
-    private var foreclosureValue: Decimal { Decimal(string: foreclosurePercent) ?? .zero }
+    private var rateValue: Decimal { Decimal(percentInput: interestRate) ?? .zero }
+    private var foreclosureValue: Decimal { Decimal(percentInput: foreclosurePercent) ?? .zero }
 
     /// Interest for one instalment period, from the annual rate and the cadence.
     private var periodRate: Double {

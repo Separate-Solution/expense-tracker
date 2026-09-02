@@ -208,6 +208,15 @@ enum EMIEngine {
         // left: a plan that skipped the installments already due when it was
         // created has fewer rows than indexes covered.
         plan.lastPostedIndex = lastIndex(of: plan, among: remaining)
+
+        // Lengthening a plan that had run its course starts it again. Without
+        // this the engine skips it for not running, and the instalments the
+        // edit just added would never post. A foreclosed plan is left alone:
+        // it was settled deliberately, and reopening it is its own action.
+        if plan.status == .completed, plan.lastPostedIndex < plan.installmentCount - 1 {
+            plan.status = .active
+            plan.closedDate = nil
+        }
     }
 
     /// The highest installment index a plan has actually posted, or -1 when it
