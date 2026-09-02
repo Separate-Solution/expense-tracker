@@ -233,16 +233,6 @@ struct TransactionsView: View {
                 }
                 Button("Cancel", role: .cancel) { pendingDeletion = nil }
             }
-            .confirmationDialog(
-                selectionCount == 1
-                    ? "Delete this transaction?"
-                    : "Delete \(selectionCount) transactions?",
-                isPresented: $isConfirmingBulkDeletion,
-                titleVisibility: .visible
-            ) {
-                Button("Delete", role: .destructive, action: deleteSelected)
-                Button("Cancel", role: .cancel) { }
-            }
             .saveFailureAlert($saveFailure)
         }
     }
@@ -303,6 +293,19 @@ struct TransactionsView: View {
                 Label("Delete", systemImage: "trash")
             }
             .tint(.red)
+            // On the button rather than the List: the dialog points at whatever
+            // it is attached to, and from the List it aims at the top of the
+            // screen instead of the button the tap came from.
+            .confirmationDialog(
+                selectionCount == 1
+                    ? "Delete this transaction?"
+                    : "Delete \(selectionCount) transactions?",
+                isPresented: $isConfirmingBulkDeletion,
+                titleVisibility: .visible
+            ) {
+                Button("Delete", role: .destructive, action: deleteSelected)
+                Button("Cancel", role: .cancel) { }
+            }
 
             Spacer()
 
