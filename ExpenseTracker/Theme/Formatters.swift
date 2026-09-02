@@ -71,6 +71,18 @@ enum Formatters {
         ordinalFormatter.string(from: NSNumber(value: day)) ?? "\(day)"
     }
 
+    /// A percentage, trimmed of a pointless ".0" — "13.5%", "0%", "18%".
+    /// - Parameter value: The rate as a percentage, not a fraction.
+    /// - Returns: The formatted string.
+    static func percent(_ value: Decimal) -> String {
+        let rounded = value.roundedToCurrency
+        var source = rounded
+        var whole = Decimal()
+        NSDecimalRound(&whole, &source, 0, .down)
+        let digits = rounded == whole ? 0 : 2
+        return rounded.formatted(.number.precision(.fractionLength(digits))) + "%"
+    }
+
     private static let ordinalFormatter: NumberFormatter = {
         let formatter = NumberFormatter()
         formatter.numberStyle = .ordinal
@@ -124,6 +136,32 @@ extension Date {
 }
 
 extension Decimal {
+    /// Reads a small number typed into a field — a rate, a percentage — in
+    /// whatever form the reader's keypad produces it.
+    ///
+    /// The numeric keypad emits the device locale's decimal separator, which is
+    /// a comma across much of Europe. `Decimal(string:)` reads only the plain
+    /// form, and it does not fail on the rest — it stops at the first mark it
+    /// doesn't recognise, so "13,5" comes back as 13 and the fraction is
+    /// silently dropped.
+    ///
+    /// Both marks are read as the decimal point rather than one of them being
+    /// treated as grouping, which is only safe because these fields hold
+    /// percentages: nobody groups a rate, so "1,234" can only mean 1.234. An
+    /// amount would need the locale's own rules — those go through the
+    /// calculator keypad, which never sees typed text.
+    /// - Parameter percentInput: The raw text from the field.
+    /// - Returns: The value, or nil when the text isn't a number.
+    init?(percentInput: String) {
+        let cleaned = percentInput
+            .trimmingCharacters(in: .whitespaces)
+            .replacingOccurrences(of: ",", with: ".")
+        guard let value = Decimal(string: cleaned, locale: Locale(identifier: "en_US_POSIX")) else {
+            return nil
+        }
+        self = value
+    }
+
     /// Lossy `Double` view, used only for chart geometry — never for money maths.
     var doubleValue: Double { NSDecimalNumber(decimal: self).doubleValue }
 

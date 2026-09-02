@@ -21,6 +21,10 @@ struct SubscriptionsView: View {
             .reduce(Decimal.zero) { $0 + monthlyEquivalent(of: $1) }
     }
 
+    /// Weeks in an average month, 52 ÷ 12. Built from whole numbers rather
+    /// than parsed from "4.345", so nothing depends on how a string is read.
+    private static let weeksPerMonth = Decimal(4345) / 1000
+
     /// Normalises a rule's cost to a per-month figure so cadences can be
     /// totalled together. Weeks use 4.345 (52 ÷ 12) and days use 30.
     /// - Parameter rule: The rule to convert.
@@ -29,8 +33,9 @@ struct SubscriptionsView: View {
         let perPeriod = rule.amount / Decimal(max(1, rule.interval))
         switch rule.frequency {
         case .daily: return perPeriod * 30
-        case .weekly: return perPeriod * Decimal(string: "4.345")!
+        case .weekly: return perPeriod * Self.weeksPerMonth
         case .monthly: return perPeriod
+        case .quarterly: return perPeriod / 3
         case .yearly: return perPeriod / 12
         }
     }

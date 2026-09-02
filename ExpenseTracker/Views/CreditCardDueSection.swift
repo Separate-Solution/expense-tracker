@@ -275,6 +275,9 @@ struct CardPaymentSheet: View {
             saveFailure = error
             return
         }
+        // An instalment charged to this card is only paid once the bill carrying
+        // it is cleared, so settling one can be what finishes an EMI.
+        EMIEngine.refreshCompletions(in: context)
         UINotificationFeedbackGenerator().notificationOccurred(.success)
         dismiss()
     }
