@@ -184,13 +184,32 @@ final class EMIPlan {
 
     // MARK: - Installments
 
-    /// The posted installments, oldest first. The settlement payment that
+    /// The posted installments, in schedule order. The settlement payment that
     /// foreclosed the plan is left out — it closed the plan rather than being
-    /// one of its installments.
+    /// one of its installments, and carries no installment index.
     var installments: [Transaction] {
         (transactions ?? [])
-            .filter { $0.id != closingPaymentID }
-            .sorted { $0.date < $1.date }
+            .filter { $0.emiInstallmentIndex != nil }
+            .sorted { ($0.emiInstallmentIndex ?? 0) < ($1.emiInstallmentIndex ?? 0) }
+    }
+
+    /// The posted installment at one position in the schedule.
+    ///
+    /// Found by the index the installment carries rather than by its position in
+    /// the list: a plan created after some installments were already due can
+    /// skip those, so the first row posted is not necessarily the first
+    /// installment.
+    /// - Parameter index: Zero-based installment index.
+    /// - Returns: The posted installment, or nil when it hasn't posted.
+    func installment(at index: Int) -> Transaction? {
+        (transactions ?? []).first { $0.emiInstallmentIndex == index }
+    }
+
+    /// How many installments the lender has charged so far. This is what the
+    /// principal is amortised against — the loan moves on when the installment
+    /// is charged, whether or not the card bill carrying it has been paid yet.
+    var chargedCount: Int {
+        min(installmentCount, max(0, lastPostedIndex + 1))
     }
 
     /// The payment that foreclosed the plan, if it was closed early.
@@ -320,17 +339,17 @@ final class EMIPlan {
         )
     }
 
-    /// The principal still owed after `paid` installments, on a reducing
+    /// The principal still owed after `charged` installments, on a reducing
     /// balance: `P(1+r)^k − E((1+r)^k − 1)/r`. This is what foreclosing has to
     /// clear — the remaining installments include interest that is never charged
     /// once the loan is closed, so paying them all off would overpay.
     ///
     /// Built from the stored installment rather than the suggested one, so a
     /// plan carrying the lender's own figure stays consistent with it.
-    /// - Parameter paid: How many installments have been paid.
+    /// - Parameter charged: How many installments the lender has charged.
     /// - Returns: The outstanding principal, never below zero or above the original.
-    func outstandingPrincipal(afterPaid paid: Int) -> Decimal {
-        let periods = max(0, min(paid, installmentCount))
+    func outstandingPrincipal(afterCharged charged: Int) -> Decimal {
+        let periods = max(0, min(charged, installmentCount))
         guard principal > 0 else { return .zero }
         let rate = periodRate
         let balance: Decimal
@@ -346,11 +365,17 @@ final class EMIPlan {
     }
 
     /// The outstanding principal as things stand today.
+    ///
+    /// Measured against the installments already charged, not the ones already
+    /// paid. On a card those differ: an installment sits on the statement for
+    /// weeks before the bill is cleared, and during that time the lender has
+    /// still had its payment — quoting against the paid count would ask for
+    /// principal the installments on the current bill are about to settle.
     /// - Parameter date: Reference point; defaults to now.
     /// - Returns: What is still owed on the principal.
     func outstandingPrincipal(asOf date: Date = .now) -> Decimal {
         guard status.isRunning else { return .zero }
-        return outstandingPrincipal(afterPaid: paidCount(asOf: date))
+        return outstandingPrincipal(afterCharged: chargedCount)
     }
 
     /// The early-closure fee on the principal still outstanding.

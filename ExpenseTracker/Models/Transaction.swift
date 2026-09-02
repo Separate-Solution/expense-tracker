@@ -33,6 +33,12 @@ final class Transaction {
     /// Set when this is an installment of an EMI plan, or the payment that
     /// foreclosed one.
     var emiPlan: EMIPlan?
+    /// Which installment of `emiPlan` this is, counting from zero. Nil on the
+    /// payment that foreclosed a plan, which settles the rest rather than being
+    /// one of them. Stored rather than inferred from position: a plan can skip
+    /// the installments that fell due before it was created, so the nth posted
+    /// row is not the nth installment.
+    var emiInstallmentIndex: Int?
 
     /// Creates a transaction. `amount` is stored as its magnitude — the sign
     /// comes from `type`.
@@ -50,6 +56,7 @@ final class Transaction {
     ///   - category: Category, if any.
     ///   - recurringRule: Rule that generated this, when applicable.
     ///   - emiPlan: EMI plan this installment belongs to, when applicable.
+    ///   - emiInstallmentIndex: Which installment of that plan it is, counting from zero.
     ///   - createdAt: Creation timestamp; also seeds `updatedAt`.
     init(
         id: UUID = UUID(),
@@ -65,6 +72,7 @@ final class Transaction {
         category: Category? = nil,
         recurringRule: RecurringRule? = nil,
         emiPlan: EMIPlan? = nil,
+        emiInstallmentIndex: Int? = nil,
         createdAt: Date = Date()
     ) {
         self.id = id
@@ -80,6 +88,7 @@ final class Transaction {
         self.category = category
         self.recurringRule = recurringRule
         self.emiPlan = emiPlan
+        self.emiInstallmentIndex = emiInstallmentIndex
         self.createdAt = createdAt
         self.updatedAt = createdAt
     }

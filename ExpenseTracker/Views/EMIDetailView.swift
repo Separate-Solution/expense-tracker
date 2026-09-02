@@ -15,9 +15,18 @@ struct EMIDetailView: View {
     @State private var saveFailure: Error?
 
     private var paidCount: Int { plan.paidCount() }
-    /// Read once for the whole instalment list rather than per row — the list
-    /// runs to as many rows as the plan has payments.
-    private var postedInstallments: [Transaction] { plan.installments }
+
+    /// The posted instalments keyed by their place in the schedule, built once
+    /// for the whole list rather than searched per row — the list runs to as
+    /// many rows as the plan has payments.
+    private var postedByIndex: [Int: Transaction] {
+        Dictionary(
+            plan.installments.compactMap { row in
+                row.emiInstallmentIndex.map { ($0, row) }
+            },
+            uniquingKeysWith: { first, _ in first }
+        )
+    }
 
     var body: some View {
         List {
@@ -111,7 +120,7 @@ struct EMIDetailView: View {
             }
 
             Section("Instalments") {
-                let posted = postedInstallments
+                let posted = postedByIndex
                 ForEach(0..<plan.installmentCount, id: \.self) { index in
                     installmentRow(at: index, posted: posted)
                 }
@@ -177,10 +186,10 @@ struct EMIDetailView: View {
     /// One scheduled instalment, marked with where it has got to.
     /// - Parameters:
     ///   - index: Zero-based instalment index.
-    ///   - posted: The instalments that exist so far, oldest first.
+    ///   - posted: The instalments that exist so far, keyed by that index.
     /// - Returns: The configured row.
-    private func installmentRow(at index: Int, posted: [Transaction]) -> some View {
-        let transaction = index < posted.count ? posted[index] : nil
+    private func installmentRow(at index: Int, posted: [Int: Transaction]) -> some View {
+        let transaction = posted[index]
         let date = transaction?.date ?? plan.installmentDate(at: index)
 
         return HStack {

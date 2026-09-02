@@ -35,7 +35,8 @@ enum EMIEngine {
                     account: plan.account,
                     creditCard: plan.creditCard,
                     category: plan.category,
-                    emiPlan: plan
+                    emiPlan: plan,
+                    emiInstallmentIndex: index
                 )
                 context.insert(installment)
                 plan.lastPostedIndex = index
@@ -157,7 +158,11 @@ enum EMIEngine {
         plan.closingPaymentID = nil
         plan.status = .active
         plan.closedDate = nil
-        plan.lastPostedIndex = plan.installments.count - 1
+        // Taken from the indexes the installments carry rather than from how
+        // many there are: the settlement payment carries none, so a delete that
+        // has not been processed yet cannot inflate the count and make the
+        // engine skip the next installment.
+        plan.lastPostedIndex = lastIndex(of: plan)
     }
 
     /// Rewrites installments that haven't fallen due yet after a plan is edited,
@@ -170,13 +175,28 @@ enum EMIEngine {
     static func applyEdits(of plan: EMIPlan, in context: ModelContext, asOf date: Date = .now) {
         let cutoff = date.endOfDay
         var remaining = plan.installments
-        for installment in plan.installments where installment.date > cutoff {
+        // A shortened plan can leave installments beyond its new end, which are
+        // no longer part of it however long ago they posted.
+        for installment in plan.installments
+        where installment.date > cutoff || (installment.emiInstallmentIndex ?? 0) >= plan.installmentCount {
             context.delete(installment)
             remaining.removeAll { $0.id == installment.id }
         }
-        // The schedule may now be shorter than what has posted, so the pointer
-        // is rebuilt from the installments that are actually left rather than
-        // trusted to still be in range.
-        plan.lastPostedIndex = min(remaining.count, plan.installmentCount) - 1
+        // Rebuilt from the highest index left rather than from how many are
+        // left: a plan that skipped the installments already due when it was
+        // created has fewer rows than indexes covered.
+        plan.lastPostedIndex = lastIndex(of: plan, among: remaining)
+    }
+
+    /// The highest installment index a plan has actually posted, or -1 when it
+    /// has posted none.
+    /// - Parameters:
+    ///   - plan: The plan to measure.
+    ///   - installments: The rows to read; the plan's own by default.
+    /// - Returns: The index the schedule has reached.
+    private static func lastIndex(of plan: EMIPlan, among installments: [Transaction]? = nil) -> Int {
+        let rows = installments ?? plan.installments
+        let highest = rows.compactMap(\.emiInstallmentIndex).max() ?? -1
+        return min(highest, plan.installmentCount - 1)
     }
 }

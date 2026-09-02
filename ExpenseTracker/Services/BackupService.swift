@@ -135,6 +135,9 @@ struct BackupPayload: Codable {
         var recurringRuleID: UUID?
         /// The EMI plan an instalment belongs to; absent before EMIs existed.
         var emiPlanID: UUID?
+        /// Which instalment of that plan it is; absent on the payment that
+        /// foreclosed one, and on rows written before EMIs existed.
+        var emiInstallmentIndex: Int?
     }
 }
 
@@ -281,7 +284,8 @@ enum BackupService {
                 toAccountID: transaction.toAccount?.id,
                 categoryID: transaction.category?.id,
                 recurringRuleID: transaction.recurringRule?.id,
-                emiPlanID: transaction.emiPlan?.id
+                emiPlanID: transaction.emiPlan?.id,
+                emiInstallmentIndex: transaction.emiInstallmentIndex
             )
         }
 
@@ -476,6 +480,7 @@ enum BackupService {
                 category: dto.categoryID.flatMap { categoriesByID[$0] },
                 recurringRule: dto.recurringRuleID.flatMap { rulesByID[$0] },
                 emiPlan: dto.emiPlanID.flatMap { plansByID[$0] },
+                emiInstallmentIndex: dto.emiInstallmentIndex,
                 createdAt: dto.createdAt
             )
             transaction.updatedAt = dto.updatedAt
