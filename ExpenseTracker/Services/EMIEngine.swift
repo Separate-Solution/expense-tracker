@@ -94,6 +94,22 @@ enum EMIEngine {
         return closed
     }
 
+    /// Marks every installment due on or before `date` as already handled, so a
+    /// plan added partway through does not backfill history.
+    ///
+    /// The skipped installments are counted on the plan rather than forgotten:
+    /// they were paid, just not through this app, and a plan that could never
+    /// account for them would never reach its own end.
+    /// - Parameters:
+    ///   - plan: The plan being created.
+    ///   - date: The day to skip up to; defaults to now.
+    static func skipInstallmentsAlreadyDue(for plan: EMIPlan, upTo date: Date = .now) {
+        let indexes = plan.pendingIndexes(upTo: date)
+        guard let last = indexes.last else { return }
+        plan.lastPostedIndex = last
+        plan.skippedInstallmentCount = last + 1
+    }
+
     /// Closes a plan early with one settlement payment.
     ///
     /// The payment is an ordinary expense on whatever the installments were
@@ -197,6 +213,10 @@ enum EMIEngine {
     private static func lastIndex(of plan: EMIPlan, among installments: [Transaction]? = nil) -> Int {
         let rows = installments ?? plan.installments
         let highest = rows.compactMap(\.emiInstallmentIndex).max() ?? -1
-        return min(highest, plan.installmentCount - 1)
+        // Never behind the instalments that were skipped as already paid: those
+        // have no row to be found by, and rewinding past them would post them
+        // after all while the plan still counts them as paid.
+        let floor = plan.skippedInstallmentCount - 1
+        return min(max(highest, floor), plan.installmentCount - 1)
     }
 }

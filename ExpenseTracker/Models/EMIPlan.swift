@@ -35,6 +35,11 @@ final class EMIPlan {
     var statusRaw: String = EMIStatus.active.rawValue
     /// Highest installment index already turned into a Transaction; -1 means none yet.
     var lastPostedIndex: Int = -1
+    /// Installments that were already paid when the plan was added and were
+    /// deliberately not written into history. They have no transaction of their
+    /// own, so they are counted here instead — otherwise a plan added halfway
+    /// through could never reach its own end.
+    var skippedInstallmentCount: Int = 0
     /// When the plan stopped running — the day it completed or was foreclosed.
     var closedDate: Date?
     /// The settlement transaction that foreclosed the plan, so it can be told
@@ -234,11 +239,13 @@ final class EMIPlan {
         return card.isStatementSettled(closingAt: close, asOf: date)
     }
 
-    /// How many installments have been paid.
+    /// How many installments have been paid — the settled ones, plus the ones
+    /// that were already paid before the plan was added.
     /// - Parameter date: Reference point; defaults to now.
-    /// - Returns: The count of settled installments.
+    /// - Returns: The count of paid installments.
     func paidCount(asOf date: Date = .now) -> Int {
-        installments.filter { isSettled($0, asOf: date) }.count
+        let settled = installments.filter { isSettled($0, asOf: date) }.count
+        return min(installmentCount, skippedInstallmentCount + settled)
     }
 
     /// How many installments are still to be paid — both those yet to post and
@@ -257,8 +264,11 @@ final class EMIPlan {
         let installmentTotal = installments
             .filter { isSettled($0, asOf: date) }
             .reduce(Decimal.zero) { $0 + abs($1.amount) }
+        // The instalments paid before the plan was added have no row to add up,
+        // so they are counted at the plan's own instalment.
+        let beforeTracking = installmentAmount * Decimal(min(installmentCount, skippedInstallmentCount))
         let closing = closingPayment.map { abs($0.amount) } ?? .zero
-        return (installmentTotal + closing).roundedToCurrency
+        return (installmentTotal + beforeTracking + closing).roundedToCurrency
     }
 
     /// What is left to pay on the schedule as it stands. A closed plan owes

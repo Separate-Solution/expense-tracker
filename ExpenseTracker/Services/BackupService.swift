@@ -106,6 +106,9 @@ struct BackupPayload: Codable {
         var startDate: Date
         var status: String
         var lastPostedIndex: Int
+        /// Instalments already paid when the plan was added; absent on backups
+        /// written before that was tracked.
+        var skippedInstallmentCount: Int?
         var closedDate: Date?
         var closingPaymentID: UUID?
         var note: String
@@ -258,6 +261,7 @@ enum BackupService {
                 startDate: plan.startDate,
                 status: plan.statusRaw,
                 lastPostedIndex: plan.lastPostedIndex,
+                skippedInstallmentCount: plan.skippedInstallmentCount,
                 closedDate: plan.closedDate,
                 closingPaymentID: plan.closingPaymentID,
                 note: plan.note,
@@ -458,6 +462,7 @@ enum BackupService {
             )
             plan.status = EMIStatus(rawValue: dto.status) ?? .active
             plan.lastPostedIndex = dto.lastPostedIndex
+            plan.skippedInstallmentCount = dto.skippedInstallmentCount ?? 0
             plan.closedDate = dto.closedDate
             plan.closingPaymentID = dto.closingPaymentID
             context.insert(plan)

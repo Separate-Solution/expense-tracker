@@ -336,12 +336,10 @@ struct EMIEditorView: View {
             )
             context.insert(created)
             if !backfillPastInstallments && startDate < Date.now.startOfDay {
-                // Nothing before today is posted, but the plan still owes them:
-                // the pointer moves past those instalments so only the ones
-                // still to come are written.
-                if let last = created.pendingIndexes(upTo: .now).last {
-                    created.lastPostedIndex = last
-                }
+                // Nothing before today is written into history, but the plan
+                // still counts those instalments as paid — they were, before it
+                // was added — so it can still reach its own end.
+                EMIEngine.skipInstallmentsAlreadyDue(for: created)
             }
         }
 
