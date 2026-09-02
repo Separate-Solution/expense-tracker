@@ -17,6 +17,7 @@ struct SettingsView: View {
     @Query private var categories: [Category]
     @Query private var rules: [RecurringRule]
     @Query private var budgets: [Budget]
+    @Query private var emiPlans: [EMIPlan]
 
     /// Rewrites a default saved before credit cards existed — a bare UUID —
     /// into the tagged form the picker's rows carry, so an upgraded install
@@ -59,6 +60,13 @@ struct SettingsView: View {
                     } label: {
                         Label("Budgets", systemImage: "chart.pie")
                             .badge(budgets.filter { !$0.isArchived }.count)
+                    }
+
+                    NavigationLink {
+                        EMIsView()
+                    } label: {
+                        Label("EMIs", systemImage: "calendar.badge.clock")
+                            .badge(emiPlans.filter { $0.status.isRunning }.count)
                     }
 
                     NavigationLink {

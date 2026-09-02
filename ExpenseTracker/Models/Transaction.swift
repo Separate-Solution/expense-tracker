@@ -30,6 +30,9 @@ final class Transaction {
 
     /// Set when this transaction was generated from a recurring rule.
     var recurringRule: RecurringRule?
+    /// Set when this is an installment of an EMI plan, or the payment that
+    /// foreclosed one.
+    var emiPlan: EMIPlan?
 
     /// Creates a transaction. `amount` is stored as its magnitude — the sign
     /// comes from `type`.
@@ -46,6 +49,7 @@ final class Transaction {
     ///   - toAccount: Destination account, on a transfer.
     ///   - category: Category, if any.
     ///   - recurringRule: Rule that generated this, when applicable.
+    ///   - emiPlan: EMI plan this installment belongs to, when applicable.
     ///   - createdAt: Creation timestamp; also seeds `updatedAt`.
     init(
         id: UUID = UUID(),
@@ -60,6 +64,7 @@ final class Transaction {
         toAccount: Account? = nil,
         category: Category? = nil,
         recurringRule: RecurringRule? = nil,
+        emiPlan: EMIPlan? = nil,
         createdAt: Date = Date()
     ) {
         self.id = id
@@ -74,6 +79,7 @@ final class Transaction {
         self.toAccount = toAccount
         self.category = category
         self.recurringRule = recurringRule
+        self.emiPlan = emiPlan
         self.createdAt = createdAt
         self.updatedAt = createdAt
     }
@@ -201,12 +207,16 @@ final class Transaction {
     /// True when a recurring rule generated this transaction.
     var isRecurringInstance: Bool { recurringRule != nil }
 
+    /// True when this row belongs to an EMI plan.
+    var isEMIInstallment: Bool { emiPlan != nil }
+
     /// An unsaved copy of this transaction, ready to insert into a context.
     ///
     /// The copy gets a fresh id and creation stamp but keeps the original's
-    /// date and time. It is deliberately *not* tied to the recurring rule —
-    /// only the recurrence engine posts occurrences of a rule, so a hand-made
-    /// duplicate stands on its own.
+    /// date and time. It is deliberately *not* tied to the recurring rule or the
+    /// EMI plan — only the engines behind those post their instalments, and a
+    /// copy counted as one would move a plan on without anything being repaid,
+    /// so a hand-made duplicate stands on its own.
     /// - Parameter createdAt: Creation stamp for the copy; defaults to now.
     /// - Returns: The new, uninserted transaction.
     func duplicated(createdAt: Date = Date()) -> Transaction {

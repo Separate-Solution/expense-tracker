@@ -71,6 +71,18 @@ enum Formatters {
         ordinalFormatter.string(from: NSNumber(value: day)) ?? "\(day)"
     }
 
+    /// A percentage, trimmed of a pointless ".0" — "13.5%", "0%", "18%".
+    /// - Parameter value: The rate as a percentage, not a fraction.
+    /// - Returns: The formatted string.
+    static func percent(_ value: Decimal) -> String {
+        let rounded = value.roundedToCurrency
+        var source = rounded
+        var whole = Decimal()
+        NSDecimalRound(&whole, &source, 0, .down)
+        let digits = rounded == whole ? 0 : 2
+        return rounded.formatted(.number.precision(.fractionLength(digits))) + "%"
+    }
+
     private static let ordinalFormatter: NumberFormatter = {
         let formatter = NumberFormatter()
         formatter.numberStyle = .ordinal

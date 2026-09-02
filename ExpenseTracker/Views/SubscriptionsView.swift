@@ -31,6 +31,7 @@ struct SubscriptionsView: View {
         case .daily: return perPeriod * 30
         case .weekly: return perPeriod * Decimal(string: "4.345")!
         case .monthly: return perPeriod
+        case .quarterly: return perPeriod / 3
         case .yearly: return perPeriod / 12
         }
     }

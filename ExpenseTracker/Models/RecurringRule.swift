@@ -115,7 +115,7 @@ final class RecurringRule {
         guard index > 0 else { return startDate }
         return Calendar.current.date(
             byAdding: frequency.calendarComponent,
-            value: index * interval,
+            value: index * interval * frequency.stepsPerUnit,
             to: startDate
         )
     }

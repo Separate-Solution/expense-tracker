@@ -109,6 +109,30 @@ have used up.
   backup — like erasing all data — clears them. Archiving a budget keeps it and its history; deleting one leaves
   every transaction untouched.
 
+**EMIs** (Settings → EMIs) — a loan or an instalment purchase repaid over a
+fixed number of payments, daily, weekly, monthly (the default), quarterly,
+yearly or on a custom every-N cadence. Enter what was financed, the annual rate
+and how many instalments, and the app suggests the instalment on a reducing
+balance — the same formula a bank quotes, and 0% simply divides the amount up.
+The suggestion is editable, because the figure that gets paid is the lender's.
+
+- Each instalment posts itself on the day it falls due, as an ordinary expense
+  on the account or card behind the plan. Paid out of a bank account, that is
+  the money gone. Charged to a **credit card**, the instalment lands on that
+  card's statement like any other purchase, and only counts as paid once that
+  bill is cleared — so paying a card bill can be what moves an EMI forward.
+- The list shows what every running plan still owes and roughly what they cost
+  per month. Opening one shows how many instalments are paid and pending, what
+  has been paid and what is left, the total payable and the interest inside it,
+  and every instalment with its own status.
+- **Foreclose** closes a plan early. It quotes what settling today would cost —
+  the principal still outstanding plus the foreclosure charge, entered as a
+  percentage of that principal — and the final payment stays editable. The
+  payment is recorded against the same account or card, and nothing more posts.
+  Reopening a foreclosed plan removes that payment and resumes the instalments.
+- When the last instalment is paid, the plan closes itself and is marked
+  **Completed**.
+
 **Recurring & subscriptions** — daily/weekly/monthly/yearly with an every-N
 interval and an optional end date. Occurrences post themselves on launch and
 whenever the app comes to the foreground. Monthly rules are always measured from
@@ -145,8 +169,8 @@ The header says how many rows were left out whenever any are.
   movements but not the balances they started from — use a backup for that. Handles `1,234.56`, `₹1,234`, `(45.00)` and
   a leading `-`; a negative amount means an expense when there's no `Type` column.
 - *Backup / restore* — one JSON file with accounts, credit cards, categories,
-  recurring rules and transactions, relationships included. Backups written by
-  older versions still restore. The format is at version 4; a file from a newer
+  recurring rules, EMIs and transactions, relationships included. Backups written
+  by older versions still restore. The format is at version 5; a file from a newer
   build is declined rather than read with pieces missing. Restore replaces everything after a
   confirmation that tells you what's in the file.
 - *Erase all data* — wipes everything and puts the default categories back.

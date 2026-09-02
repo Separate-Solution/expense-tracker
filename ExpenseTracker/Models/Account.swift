@@ -30,6 +30,9 @@ final class Account {
     @Relationship(deleteRule: .nullify, inverse: \RecurringRule.account)
     var recurringRules: [RecurringRule]? = []
 
+    @Relationship(deleteRule: .nullify, inverse: \EMIPlan.account)
+    var emiPlans: [EMIPlan]? = []
+
     /// Budgets narrowed to this account. A budget tied to none watches them all.
     var budgets: [Budget]? = []
 

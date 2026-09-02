@@ -32,6 +32,9 @@ final class CreditCard {
     @Relationship(deleteRule: .nullify, inverse: \RecurringRule.creditCard)
     var recurringRules: [RecurringRule]? = []
 
+    @Relationship(deleteRule: .nullify, inverse: \EMIPlan.creditCard)
+    var emiPlans: [EMIPlan]? = []
+
     /// Budgets narrowed to this card. A budget tied to none watches them all.
     var budgets: [Budget]? = []
 
@@ -181,6 +184,32 @@ final class CreditCard {
         return (transactions ?? [])
             .filter { $0.kind != .cardPayment && cycle.contains($0.date) && $0.date <= cutoff }
             .reduce(Decimal.zero) { $0 + $1.creditCardImpact }
+    }
+
+    /// Whether the bill for the statement closing at `close` has been cleared.
+    ///
+    /// The same maths `amountDue` runs, aimed at any statement rather than only
+    /// the latest one: the balance the statement closed at, less everything that
+    /// brought it down afterwards — a payment, and equally a refund. Charges
+    /// made after the close belong to the next bill and are left out.
+    ///
+    /// A statement that has not closed yet is never settled: nothing is due on a
+    /// bill that is still collecting charges.
+    /// - Parameters:
+    ///   - close: The last moment of the statement day being asked about.
+    ///   - date: Reference point; defaults to now.
+    /// - Returns: True once that bill is fully paid.
+    func isStatementSettled(closingAt close: Date, asOf date: Date = .now) -> Bool {
+        let cutoff = date.endOfDay
+        guard close <= cutoff else { return false }
+        let rows = transactions ?? []
+        let balance = rows
+            .filter { $0.date <= close }
+            .reduce(openingOutstanding) { $0 + $1.creditCardImpact }
+        let settledSinceClose = rows
+            .filter { $0.date > close && $0.date <= cutoff }
+            .reduce(Decimal.zero) { $0 + max(.zero, -$1.creditCardImpact) }
+        return (balance - settledSinceClose).roundedToCurrency <= 0
     }
 
     /// True once the last statement's bill is settled, so the dashboard can

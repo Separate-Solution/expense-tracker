@@ -56,11 +56,14 @@ struct RootView: View {
         .task {
             SeedData.seedIfNeeded(in: context)
             RecurrenceEngine.postDueTransactions(in: context)
+            EMIEngine.postDueInstallments(in: context)
         }
         .onChange(of: scenePhase) { _, phase in
-            // Catch up on subscriptions that fell due while the app was backgrounded.
+            // Catch up on subscriptions and EMI instalments that fell due while
+            // the app was backgrounded.
             if phase == .active {
                 RecurrenceEngine.postDueTransactions(in: context)
+                EMIEngine.postDueInstallments(in: context)
             }
         }
     }

@@ -313,8 +313,8 @@ struct DataManagementView: View {
             showStatus(
                 "Restored",
                 "\(summary.transactions) transactions, \(summary.accounts) accounts, "
-                + "\(summary.creditCards) credit cards, \(summary.categories) categories "
-                + "and \(summary.recurringRules) recurring rules are back."
+                + "\(summary.creditCards) credit cards, \(summary.categories) categories, "
+                + "\(summary.recurringRules) recurring rules and \(summary.emiPlans) EMIs are back."
             )
         } onFailure: { error in
             showStatus("Restore failed", error.localizedDescription)

@@ -80,6 +80,7 @@ enum RecurrenceFrequency: String, Codable, CaseIterable, Identifiable {
     case daily
     case weekly
     case monthly
+    case quarterly
     case yearly
 
     var id: String { rawValue }
@@ -90,6 +91,7 @@ enum RecurrenceFrequency: String, Codable, CaseIterable, Identifiable {
         case .daily: return "Daily"
         case .weekly: return "Weekly"
         case .monthly: return "Monthly"
+        case .quarterly: return "Quarterly"
         case .yearly: return "Yearly"
         }
     }
@@ -103,6 +105,7 @@ enum RecurrenceFrequency: String, Codable, CaseIterable, Identifiable {
         case .daily: singular = "day"
         case .weekly: singular = "week"
         case .monthly: singular = "month"
+        case .quarterly: singular = "quarter"
         case .yearly: singular = "year"
         }
         return interval == 1 ? singular : "\(singular)s"
@@ -113,10 +116,62 @@ enum RecurrenceFrequency: String, Codable, CaseIterable, Identifiable {
         switch self {
         case .daily: return .day
         case .weekly: return .weekOfYear
-        case .monthly: return .month
+        case .monthly, .quarterly: return .month
         case .yearly: return .year
         }
     }
+
+    /// How many `calendarComponent` steps one unit of this frequency spans.
+    /// Only a quarter is worth more than one — three months.
+    var stepsPerUnit: Int { self == .quarterly ? 3 : 1 }
+
+    /// Roughly how often this comes round in a year, for normalising costs
+    /// across cadences and for turning an annual interest rate into a per-period
+    /// one. Weeks and days are averages, so anything built on this is an
+    /// estimate rather than an exact figure.
+    var periodsPerYear: Double {
+        switch self {
+        case .daily: return 365
+        case .weekly: return 52
+        case .monthly: return 12
+        case .quarterly: return 4
+        case .yearly: return 1
+        }
+    }
+}
+
+/// Where an EMI plan stands. It runs until every installment is paid, unless it
+/// is closed early by paying the balance off in one go.
+enum EMIStatus: String, Codable, CaseIterable, Identifiable {
+    /// Still posting installments.
+    case active
+    /// Every installment was paid.
+    case completed
+    /// Closed early with a single settlement payment.
+    case foreclosed
+
+    var id: String { rawValue }
+
+    /// Display name used on rows and section headers.
+    var title: String {
+        switch self {
+        case .active: return "Active"
+        case .completed: return "Completed"
+        case .foreclosed: return "Foreclosed"
+        }
+    }
+
+    /// SF Symbol for the status badge.
+    var symbolName: String {
+        switch self {
+        case .active: return "clock"
+        case .completed: return "checkmark.circle.fill"
+        case .foreclosed: return "flag.checkered"
+        }
+    }
+
+    /// Whether a plan in this state still posts installments.
+    var isRunning: Bool { self == .active }
 }
 
 /// What a transaction represents. A standard row is real spending or income; a

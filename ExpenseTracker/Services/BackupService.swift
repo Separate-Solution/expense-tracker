@@ -14,7 +14,10 @@ struct BackupPayload: Codable {
     /// 4 added the transfer destination on transactions. A version 3 build
     /// reading one would drop the destination and leave a transfer looking like
     /// a plain expense, so the bump makes it decline the file instead.
-    static let currentFormatVersion = 4
+    ///
+    /// 5 added EMI plans and the link from an instalment back to its plan.
+    /// Everything it adds is optional, so a version 4 backup still restores.
+    static let currentFormatVersion = 5
 
     var formatVersion: Int = BackupPayload.currentFormatVersion
     var exportedAt: Date = Date()
@@ -25,6 +28,8 @@ struct BackupPayload: Codable {
     var creditCards: [CreditCardDTO]? = []
     var categories: [CategoryDTO] = []
     var recurringRules: [RecurringRuleDTO] = []
+    /// Absent in backups written before EMIs existed.
+    var emiPlans: [EMIPlanDTO]? = []
     var transactions: [TransactionDTO] = []
 
     struct AccountDTO: Codable {
@@ -88,6 +93,28 @@ struct BackupPayload: Codable {
         var categoryID: UUID?
     }
 
+    struct EMIPlanDTO: Codable {
+        var id: UUID
+        var title: String
+        var principal: Decimal
+        var annualInterestRate: Decimal
+        var foreclosureChargePercent: Decimal
+        var frequency: String
+        var interval: Int
+        var installmentCount: Int
+        var installmentAmount: Decimal
+        var startDate: Date
+        var status: String
+        var lastPostedIndex: Int
+        var closedDate: Date?
+        var closingPaymentID: UUID?
+        var note: String
+        var createdAt: Date
+        var accountID: UUID?
+        var creditCardID: UUID?
+        var categoryID: UUID?
+    }
+
     struct TransactionDTO: Codable {
         var id: UUID
         var title: String
@@ -106,6 +133,8 @@ struct BackupPayload: Codable {
         var toAccountID: UUID?
         var categoryID: UUID?
         var recurringRuleID: UUID?
+        /// The EMI plan an instalment belongs to; absent before EMIs existed.
+        var emiPlanID: UUID?
     }
 }
 
@@ -114,6 +143,7 @@ struct BackupSummary {
     var creditCards: Int
     var categories: Int
     var recurringRules: Int
+    var emiPlans: Int
     var transactions: Int
 }
 
@@ -211,6 +241,30 @@ enum BackupService {
             )
         }
 
+        payload.emiPlans = try context.fetch(FetchDescriptor<EMIPlan>()).map { plan in
+            .init(
+                id: plan.id,
+                title: plan.title,
+                principal: plan.principal,
+                annualInterestRate: plan.annualInterestRate,
+                foreclosureChargePercent: plan.foreclosureChargePercent,
+                frequency: plan.frequencyRaw,
+                interval: plan.interval,
+                installmentCount: plan.installmentCount,
+                installmentAmount: plan.installmentAmount,
+                startDate: plan.startDate,
+                status: plan.statusRaw,
+                lastPostedIndex: plan.lastPostedIndex,
+                closedDate: plan.closedDate,
+                closingPaymentID: plan.closingPaymentID,
+                note: plan.note,
+                createdAt: plan.createdAt,
+                accountID: plan.account?.id,
+                creditCardID: plan.creditCard?.id,
+                categoryID: plan.category?.id
+            )
+        }
+
         payload.transactions = try context.fetch(FetchDescriptor<Transaction>()).map { transaction in
             .init(
                 id: transaction.id,
@@ -226,7 +280,8 @@ enum BackupService {
                 creditCardID: transaction.creditCard?.id,
                 toAccountID: transaction.toAccount?.id,
                 categoryID: transaction.category?.id,
-                recurringRuleID: transaction.recurringRule?.id
+                recurringRuleID: transaction.recurringRule?.id,
+                emiPlanID: transaction.emiPlan?.id
             )
         }
 
@@ -275,9 +330,10 @@ enum BackupService {
     ) async throws -> BackupSummary {
         // Weighted by row count so the bar tracks the work rather than the
         // number of phases — a file is mostly transactions.
-        let total = payload.accounts.count + (payload.creditCards ?? []).count
-            + payload.categories.count + payload.recurringRules.count
-            + payload.transactions.count
+        let cardCount = (payload.creditCards ?? []).count
+        let planCount = (payload.emiPlans ?? []).count
+        let total = payload.accounts.count + cardCount + payload.categories.count
+            + payload.recurringRules.count + planCount + payload.transactions.count
         var done = 0
         let ticker = onProgress.map { ProgressTicker(total: max(1, total), report: $0) }
 
@@ -377,6 +433,34 @@ enum BackupService {
             await step()
         }
 
+        var plansByID: [UUID: EMIPlan] = [:]
+        for dto in payload.emiPlans ?? [] {
+            let plan = EMIPlan(
+                id: dto.id,
+                title: dto.title,
+                principal: dto.principal,
+                annualInterestRate: dto.annualInterestRate,
+                foreclosureChargePercent: dto.foreclosureChargePercent,
+                frequency: RecurrenceFrequency(rawValue: dto.frequency) ?? .monthly,
+                interval: dto.interval,
+                installmentCount: dto.installmentCount,
+                installmentAmount: dto.installmentAmount,
+                startDate: dto.startDate,
+                note: dto.note,
+                account: dto.accountID.flatMap { accountsByID[$0] },
+                creditCard: dto.creditCardID.flatMap { cardsByID[$0] },
+                category: dto.categoryID.flatMap { categoriesByID[$0] },
+                createdAt: dto.createdAt
+            )
+            plan.status = EMIStatus(rawValue: dto.status) ?? .active
+            plan.lastPostedIndex = dto.lastPostedIndex
+            plan.closedDate = dto.closedDate
+            plan.closingPaymentID = dto.closingPaymentID
+            context.insert(plan)
+            plansByID[dto.id] = plan
+            await step()
+        }
+
         for dto in payload.transactions {
             let transaction = Transaction(
                 id: dto.id,
@@ -391,6 +475,7 @@ enum BackupService {
                 toAccount: dto.toAccountID.flatMap { accountsByID[$0] },
                 category: dto.categoryID.flatMap { categoriesByID[$0] },
                 recurringRule: dto.recurringRuleID.flatMap { rulesByID[$0] },
+                emiPlan: dto.emiPlanID.flatMap { plansByID[$0] },
                 createdAt: dto.createdAt
             )
             transaction.updatedAt = dto.updatedAt
@@ -424,6 +509,8 @@ enum BackupService {
             categories: (try? context.fetchCount(FetchDescriptor<Category>())) ?? payload.categories.count,
             recurringRules: (try? context.fetchCount(FetchDescriptor<RecurringRule>()))
                 ?? payload.recurringRules.count,
+            emiPlans: (try? context.fetchCount(FetchDescriptor<EMIPlan>()))
+                ?? (payload.emiPlans ?? []).count,
             transactions: (try? context.fetchCount(FetchDescriptor<Transaction>()))
                 ?? payload.transactions.count
         )
@@ -442,6 +529,7 @@ enum BackupService {
     private static let wipeSteps: [(ModelContext) throws -> Void] = [
         { try $0.delete(model: Transaction.self) },
         { try $0.delete(model: RecurringRule.self) },
+        { try $0.delete(model: EMIPlan.self) },
         { try $0.delete(model: Budget.self) },
         { try $0.delete(model: Category.self) },
         { try $0.delete(model: CreditCard.self) },
